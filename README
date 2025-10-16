@@ -1,0 +1,6 @@
+----------------------- EXECUÇÃO LOCAL ----------------------- 
+
+WINDOWS
+python -m venv env
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+.\env\Scripts\activate 
