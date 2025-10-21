@@ -1,0 +1,8 @@
+version: 1.0
+
+endpoints:
+  - name: "CB MUSIC FIRST RECOMMENDATION"
+    port: 8000
+    type: REST
+    networkVisibility: Public
+    context: /

@@ -1,4 +1,4 @@
------------------------ EXECUÇÃO LOCAL ----------------------- 
+[BACKEND] ----------------------- SETUP LOCAL ----------------------- 
 
 WINDOWS
 python -m venv env
@@ -7,7 +7,24 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 pip install -r .\requirements.txt
 
 
------------------------ INICIAR BANCO ----------------------- 
+[BACKEND] ----------------------- INICIAR BANCO ----------------------- 
 
 python manage.py makemigrations
 python manage.py migrate
+
+
+[BACKEND] ----------------------- INICIAR SERVIDOR ----------------------- 
+
+python manage.py runserver
+
+
+[FRONTEND] ---------------------- SETUP INICIAL ----------------------- 
+
+cd frontend
+npm install axios react-router-dom jwt-decode
+
+
+[FRONTEND] ---------------------- INICIAR FRONT ----------------------- 
+
+npm install
+npm run dev
