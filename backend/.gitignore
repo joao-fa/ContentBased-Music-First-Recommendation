@@ -1,12 +1,11 @@
 .env
 db.sqlite3
+api/data/datasets/
 
-# Arquivos Python
 __pycache__/
 *.py[cod]
 *.pyo
 
-# Arquivos temporários
 *.log
 *.tmp
 *.swp
