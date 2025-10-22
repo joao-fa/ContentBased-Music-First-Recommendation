@@ -1,2 +1,12 @@
 .env
 db.sqlite3
+
+# Arquivos Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Arquivos temporários
+*.log
+*.tmp
+*.swp
