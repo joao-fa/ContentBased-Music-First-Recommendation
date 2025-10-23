@@ -3,8 +3,11 @@ from rest_framework import generics
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated, AllowAny
+
 from .serializers import UserSerializer, NoteSerializer, TrackSerializer, ArtistNameSerializer
 from .models import Note, Track
+from app_logger import AppLogger
+
 
 class CreateUserView(generics.CreateAPIView):
     queryset = User.objects.all()
@@ -20,10 +23,11 @@ class NoteListCreate(generics.ListCreateAPIView):
         return Note.objects.filter(author=user)
     
     def perform_create(self, serializer):
+        logger = AppLogger(__name__)
         if serializer.is_valid():
             serializer.save(author=self.request.user)
         else:
-            print(serializer.errors)
+            logger.warning(serializer.errors)
 
 class NoteDelete(generics.DestroyAPIView):
     serializer_class = NoteSerializer

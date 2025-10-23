@@ -1,0 +1,32 @@
+/* Baseia-se em Form.css e adiciona ajustes de layout */
+
+.home-container {
+  text-align: center;
+  max-width: 600px;
+  padding: 40px;
+}
+
+.home-title {
+  font-size: 2rem;
+  color: #333;
+  margin-bottom: 15px;
+}
+
+.home-description {
+  font-size: 1rem;
+  color: #555;
+  margin-bottom: 30px;
+}
+
+.home-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  flex-wrap: wrap; /* para se ajustar bem em telas menores */
+}
+
+.home-button {
+  width: 220px;
+  font-size: 1.1rem;
+  padding: 15px;
+}

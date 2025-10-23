@@ -31,6 +31,7 @@ class Track(models.Model):
     valence = models.FloatField(null=True, blank=True)
     tempo = models.FloatField(null=True, blank=True)
     time_signature = models.IntegerField(null=True, blank=True)
+    cluster = models.IntegerField(null=True, blank=True)
 
     def __str__(self):
         return f"{self.name} - {self.artists}"

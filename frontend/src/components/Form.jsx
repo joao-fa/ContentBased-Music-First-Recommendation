@@ -26,7 +26,8 @@ function Form ({route, method}) {
                 navigate("/login")
             }
         } catch (error) {
-            alert(error)
+            const message = error.response?.data?.detail || "Erro ao autenticar. Tente novamente."
+            alert(message)
         } finally {
             setLoading(false)
         }
@@ -48,8 +49,8 @@ function Form ({route, method}) {
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Password"
         />
-        <button className="form-button" type="submit">
-            {name}
+        <button className="form-button" type="submit" disabled={loading}>
+            {loading ? "Carregando..." : name}
         </button>
     </form>
 }
