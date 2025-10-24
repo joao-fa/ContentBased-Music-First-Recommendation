@@ -19,7 +19,10 @@ class Command(BaseCommand):
         algorithm = os.getenv("ALGORITHM")
         num_clusters = int(os.getenv("NUM_CLUSTERS"))
         apply_scale = os.getenv("APPLY_SCALE") == 'True'
-        model_name = f"{os.getenv("ALGORITHM")}_retention_{os.getenv("RETENTION")}_ds_name_{os.getenv("DATASET_NAME").replace(".csv","")}"
+        if algorithm == 'kmeans':
+            model_name = f"ALG_{algorithm}_RET_{dataset_retention}_CLU_{num_clusters}_DS_{dataset_name.replace(".csv","")}"
+        else:
+            model_name = f"ALG_{algorithm}_RET_{dataset_retention}_DS_{dataset_name.replace(".csv","")}"
         model_path = os.path.join(
             settings.BASE_DIR, "api", "data", "trained_models", f"{model_name}.pkl"
         )

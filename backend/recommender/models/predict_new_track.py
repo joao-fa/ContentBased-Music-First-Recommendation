@@ -19,7 +19,7 @@ class PredictNewTrack:
     def execute(self):
         if os.path.exists(self.model_location):
             loaded_model = joblib.load(self.model_location)
-            if self.model_name.startswith('kmeans'):
+            if self.model_name.startswith('ALG_kmeans'):
                 self.predict_kmeans_cluster_for_each_row(loaded_model)
             else:
                 raise Exception(f"Invalid model name {self.model_name}. Valid options should start with 'kmeans[...]'")
