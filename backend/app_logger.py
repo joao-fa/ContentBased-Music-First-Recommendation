@@ -29,13 +29,13 @@ class AppLogger:
             self.logger.addHandler(file_handler)
 
     def info(self, message):
-        self.logger.info(message)
+        self.logger.info(message, stacklevel=2)
 
     def warning(self, message):
-        self.logger.warning(message)
+        self.logger.warning(message, stacklevel=2)
 
     def error(self, message):
-        self.logger.error(message)
+        self.logger.error(message, stacklevel=2)
 
     def debug(self, message):
-        self.logger.debug(message)
+        self.logger.debug(message, stacklevel=2)

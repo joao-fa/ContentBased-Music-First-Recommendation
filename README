@@ -3,7 +3,8 @@
 WINDOWS
 python -m venv env
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-.\env\Scripts\activate 
+.\env\Scripts\activate
+cd .\backend\
 pip install -r .\requirements.txt
 
 
@@ -20,7 +21,7 @@ python manage.py runserver
 
 [FRONTEND] ---------------------- SETUP INICIAL ----------------------- 
 
-cd frontend
+cd .\frontend\
 npm install axios react-router-dom jwt-decode
 
 

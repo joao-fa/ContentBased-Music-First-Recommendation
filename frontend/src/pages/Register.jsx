@@ -11,7 +11,7 @@ export default function Register() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await api.post("/api/register/", { username, password });
+      await api.post("/api/user/register/", { username, password });
       navigate("/login");
     } catch (err) {
       alert("Erro ao registrar: " + err.message);
