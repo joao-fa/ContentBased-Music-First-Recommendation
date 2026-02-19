@@ -21,7 +21,11 @@ export default function Register() {
   return (
     <div className="auth-page">
       <header className="auth-header">
-        <h1 className="site-title">CB Music First Recommendation</h1>
+        <h1 
+          className="site-title"
+          onClick={() => navigate("/")}
+          style={{ cursor: "pointer" }}
+        >CB Music First Recommendation</h1>
       </header>
       <main className="auth-container">
         <h2 className="auth-heading">Registro</h2>

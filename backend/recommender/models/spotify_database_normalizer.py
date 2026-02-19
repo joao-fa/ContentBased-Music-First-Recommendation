@@ -13,6 +13,10 @@ class SpotifyDatabaseNormalizer:
         self.normalized_dataframe = None
         self.unecessary_columns = [
             'popularity',
+            'key',
+            'mode',
+            'time_signature',
+            'duration_ms'
         ] 
         self.non_numeric_columns = [
             'id',
@@ -23,6 +27,7 @@ class SpotifyDatabaseNormalizer:
             'explicit',
         ]
         self.metadata_dataframe = None
+        self.scaler = None
 
     def shuffle_dataframe(self):
         self.dataframe = self.dataframe.sample(frac=1, random_state=42).reset_index(drop=True) # 42 is arbitrary, but all runs with it will end with the same shuffle order
@@ -33,23 +38,28 @@ class SpotifyDatabaseNormalizer:
         self.dataframe = dataframe_clipper.preserve_dataframe_percentage(dataset_retention)
 
     def remove_unecessary_columns(self):
-        self.logger.info("Removing unecessary columns...")
-        self.dataframe = self.dataframe.drop(columns=self.unecessary_columns)
+        self.logger.info(
+            "Marking unecessary columns to be excluded from clustering (but preserved for persistence)..."
+        )
 
     def return_df_numeric_columns(self, columns):
-        return [item for item in columns if item not in self.non_numeric_columns]
+        return [
+            item for item in columns
+            if item not in self.non_numeric_columns and item not in self.unecessary_columns
+        ]
 
     def create_reduced_dataframe(self):
         self.logger.info("Creating reduced dataframe...")
         dataframe_columns = self.dataframe.columns.tolist()
         numeric_columns = self.return_df_numeric_columns(dataframe_columns)
         self.reduced_dataframe = self.dataframe[numeric_columns]
-        self.metadata_dataframe = self.dataframe[self.non_numeric_columns].reset_index(drop=True)
+        preserved_columns = self.non_numeric_columns + self.unecessary_columns
+        self.metadata_dataframe = self.dataframe[preserved_columns].reset_index(drop=True)
 
     def apply_data_scaling(self):
         self.logger.info("Stracting dataframe features...")
-        scaler = StandardScaler()
-        dataframe_features = scaler.fit_transform(self.reduced_dataframe)
+        self.scaler = StandardScaler()
+        dataframe_features = self.scaler.fit_transform(self.reduced_dataframe)
         self.normalized_dataframe = pd.DataFrame(dataframe_features)
         self.normalized_dataframe.columns = self.reduced_dataframe.columns
 
@@ -62,29 +72,7 @@ class SpotifyDatabaseNormalizer:
             self.apply_data_scaling()
         else:
             self.normalized_dataframe = self.reduced_dataframe
+        normalized_columns = self.normalized_dataframe.columns.tolist()
+        self.logger.info("Remaining columns after removal:\n"f"{normalized_columns}")
         return self.normalized_dataframe
-
-# Columns relation:
-# COLUM                                  EXAMPLE    USED FOR CLUSTERING
-# 1. Unnamed: 0                                0            X - Sounds like index column, but we already have track_id
-# 2. track_id             5SuOikwiRyPMVoIQDJUgSV            X
-# 3. artists                         Gen Hoshino            X
-# 4. album_name                           Comedy            X
-# 5. track_name                           Comedy            X
-# 6. popularity                               73            X - Not returned in Spotify feature search
-# 7. duration_ms                          230666
-# 8. explicit                              False            X
-# 9. danceability                          0.676
-# 10. energy                               0.461
-# 11. key                                      1
-# 12. loudness                            -6.746
-# 13. mode                                     0
-# 14. speechiness                          0.143
-# 15. acousticness                        0.0322
-# 16. instrumentalness                  0.000001
-# 17. liveness                             0.358
-# 18. valence                              0.715
-# 19. tempo                               87.917
-# 20. time_signature                           4
-# 21. track_genre                       acoustic            X
 

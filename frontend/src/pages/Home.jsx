@@ -15,7 +15,11 @@ export default function Home() {
       {}
       <header className="home-header">
         <div className="header-left">
-          <h2 className="site-title">CB Music First Recommendation</h2>
+          <h2 
+            className="site-title"
+            onClick={() => navigate("/")}
+            style={{ cursor: "pointer" }}
+          >CB Music First Recommendation</h2>
 
           <div className="header-nav">
             <button

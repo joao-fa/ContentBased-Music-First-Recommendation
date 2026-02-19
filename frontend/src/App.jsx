@@ -5,6 +5,8 @@ import Register from "./pages/Register"
 import Home from "./pages/Home"
 import NotFound from "./pages/NotFound"
 import ProtectedRoute from "./components/ProtectedRoute"
+import Recommender from "./pages/Recommender"
+import RecommendationResults from "./pages/RecommendationResults";
 
 function Logout() {
   localStorage.clear()
@@ -23,6 +25,22 @@ function App() {
         <Route path="/" element={
             <ProtectedRoute>
               <Home />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/recommender"
+          element={
+            <ProtectedRoute>
+              <Recommender />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/recommendation-results"
+          element={
+            <ProtectedRoute>
+              <RecommendationResults />
             </ProtectedRoute>
           }
         />

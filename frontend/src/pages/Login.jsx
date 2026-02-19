@@ -25,7 +25,11 @@ function Login() {
   return (
     <div className="auth-page">
       <header className="auth-header">
-        <h1 className="site-title">CB Music First Recommendation</h1>
+        <h1 
+          className="site-title"
+          onClick={() => navigate("/")}
+          style={{ cursor: "pointer" }}
+        >CB Music First Recommendation</h1>
       </header>
 
       <div className="auth-container">

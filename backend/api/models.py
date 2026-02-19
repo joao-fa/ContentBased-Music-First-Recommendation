@@ -25,3 +25,17 @@ class Track(models.Model):
 
     def __str__(self):
         return f"{self.name} - {self.artists}"
+
+from django.db import models
+
+class ClusterMetadata(models.Model):
+    cluster = models.IntegerField()
+    feature = models.CharField(max_length=100)
+    median = models.FloatField(null=True)
+    std_deviation = models.FloatField(null=True)
+
+    class Meta:
+        unique_together = ("cluster", "feature")
+
+    def __str__(self):
+        return f"Cluster {self.cluster} - {self.feature}"
