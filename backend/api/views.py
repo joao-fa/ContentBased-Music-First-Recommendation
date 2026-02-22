@@ -168,18 +168,18 @@ class RecommendationView(generics.GenericAPIView):
         serializer.is_valid(raise_exception=True)
         track_in = serializer.validated_data
 
-        cluster = track_in.get("cluster")
-        if cluster is None:
-            return Response({"error": "A track enviada não possui cluster."}, status=400)
-
         track_id = track_in["id"]
 
         ref_track = Track.objects.filter(id=track_id).first()
         if not ref_track:
             return Response(
                 {"error": f"Track referência (id={track_id}) não encontrada no banco."},
-                status=404,
+                status=404
             )
+
+        cluster = ref_track.cluster
+        if cluster is None:
+            return Response({"error": "Track referência não possui cluster no banco."}, status=400)
 
         qs_random = (
             Track.objects.filter(cluster=cluster)

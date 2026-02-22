@@ -23,8 +23,8 @@ class ArtistNameSerializer(serializers.Serializer):
 
 class InputTrackSerializer(serializers.Serializer):
     id = serializers.CharField()
-    name = serializers.CharField()
-    artists = serializers.CharField()
+    name = serializers.CharField(required=False, allow_blank=True)
+    artists = serializers.CharField(required=False, allow_blank=True)
     cluster = serializers.IntegerField(required=False, allow_null=True)
     danceability = serializers.FloatField(required=False, allow_null=True)
     energy = serializers.FloatField(required=False, allow_null=True)
