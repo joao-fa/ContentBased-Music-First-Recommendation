@@ -23,7 +23,8 @@ python manage.py runserver
 
 cd .\frontend\
 npm install axios react-router-dom jwt-decode
-
+npm install react-icons
+npm install lucide-react
 
 [FRONTEND] ---------------------- INICIAR FRONT ----------------------- 
 
