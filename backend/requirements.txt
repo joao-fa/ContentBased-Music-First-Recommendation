@@ -1,8 +1,11 @@
+Django==5.2.13
+djangorestframework==3.17.1
+djangorestframework-simplejwt==5.5.1
+django-cors-headers==4.9.0
+psycopg2-binary==2.9.11
+python-dotenv==1.2.2
+gunicorn==23.0.0
 asgiref
-Django
-django-cors-headers
-djangorestframework
-djangorestframework-simplejwt
 PyJWT
 pytz
 sqlparse

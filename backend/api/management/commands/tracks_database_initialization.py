@@ -61,6 +61,12 @@ class Command(BaseCommand):
         dataset_reader = ReadCSVDataset(dataset_name)
         dataframe = dataset_reader.execute()
 
+        if dataframe is None or dataframe.empty:
+            self.stdout.write(self.style.ERROR(
+                f"[ERRO] Dataset '{dataset_name}' não pôde ser carregado."
+            ))
+            return
+
         # ======================================================
         # 2) Normalizador decide quais colunas serão consideradas
         # ======================================================
