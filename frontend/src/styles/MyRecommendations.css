@@ -1,0 +1,106 @@
+.my-recommendations-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 1.5rem;
+}
+
+.my-rec-card {
+  background: #f9fafb;
+  border: 1px solid #dbe3ee;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.my-rec-header {
+  width: 100%;
+  border: none;
+  background: #ffffff;
+  padding: 18px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.2s ease-in-out;
+}
+
+.my-rec-header:hover {
+  background: #eef5ff;
+}
+
+.my-rec-header-text {
+  min-width: 0;
+}
+
+.my-rec-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.my-rec-subtitle {
+  margin: 6px 0 4px;
+  color: #475569;
+  font-size: 14px;
+}
+
+.my-rec-date {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.my-rec-icon {
+  color: #334155;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.my-rec-body {
+  padding: 0 16px 16px;
+}
+
+.my-rec-item {
+  margin-top: 12px;
+}
+
+.my-rec-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  min-width: 0;
+}
+
+.my-rec-track-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.my-rec-track-label {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.my-rec-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.my-rec-rating-text {
+  font-size: 14px;
+  color: #334155;
+  white-space: nowrap;
+}
+
+.my-rec-item .rating-controls {
+  flex-shrink: 0;
+}

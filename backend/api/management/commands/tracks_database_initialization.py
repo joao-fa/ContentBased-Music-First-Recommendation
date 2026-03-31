@@ -137,85 +137,88 @@ class Command(BaseCommand):
             ))
 
         # ======================================================
-        # 6) Limpar tabela Track
-        # ======================================================
-        if Track.objects.exists():
-            self.stdout.write(
-                self.style.WARNING(
-                    "[INFO] Tabela 'Track' já populada — limpando antes da nova inserção..."
-                )
-            )
-            if connection.vendor == "postgresql":
-                with connection.cursor() as cursor:
-                    cursor.execute(
-                        f'TRUNCATE TABLE "{Track._meta.db_table}" RESTART IDENTITY CASCADE;'
-                    )
-                self.stdout.write(
-                    self.style.SUCCESS(
-                        "[INFO] Tabela 'Track' truncada com sucesso (Postgres)."
-                    )
-                )
-            else:
-                Track.objects.all().delete()
-                self.stdout.write(
-                    self.style.SUCCESS("[INFO] Tabela 'Track' limpa com sucesso (delete).")
-                )
-
-        # ======================================================
-        # 7) Popular tabela Track
+        # 6) UPSERT da tabela Track
         # ======================================================
         self.stdout.write(
             self.style.SUCCESS(
-                "[INFO] Salvando faixas no banco com cluster predito..."
+                "[INFO] Atualizando tabela 'Track'..."
             )
         )
-        bulk_tracks = []
-        for _, row in final_dataframe.iterrows():
-            bulk_tracks.append(
-                Track(
-                    id=row["id"],
-                    name=row["name"],
-                    popularity=row.get("popularity", 0),
-                    duration_ms=row.get("duration_ms", 0),
-                    explicit=row.get("explicit", False),
-                    artists=row.get("artists", ""),
-                    id_artists=row.get("id_artists", ""),
-                    release_date=row.get("release_date", ""),
-                    danceability=row.get("danceability"),
-                    energy=row.get("energy"),
-                    key=row.get("key", 0),
-                    loudness=row.get("loudness"),
-                    mode=row.get("mode", 0),
-                    speechiness=row.get("speechiness"),
-                    acousticness=row.get("acousticness"),
-                    instrumentalness=row.get("instrumentalness"),
-                    liveness=row.get("liveness"),
-                    valence=row.get("valence"),
-                    tempo=row.get("tempo"),
-                    time_signature=row.get("time_signature", 4),
-                    cluster=row.get("cluster"),
+
+        existing_tables = connection.introspection.table_names()
+        if Track._meta.db_table not in existing_tables:
+            self.stdout.write(
+                self.style.ERROR(
+                    f"[ERRO] A tabela '{Track._meta.db_table}' não existe. Rode as migrações antes do bootstrap."
                 )
             )
+            return
 
-        Track.objects.bulk_create(
-            bulk_tracks,
-            ignore_conflicts=True,
-            batch_size=10000,
-        )
+        records = final_dataframe.to_dict("records")
+        incoming_ids = [row["id"] for row in records]
+
+        existing_tracks = Track.objects.in_bulk(incoming_ids)
+
+        to_create = []
+        to_update = []
+
+        for row in records:
+            track_id = row["id"]
+            predicted_cluster = row.get("cluster")
+
+            existing = existing_tracks.get(track_id)
+
+            if existing is None:
+                to_create.append(
+                    Track(
+                        id=row["id"],
+                        name=row["name"],
+                        popularity=row.get("popularity", 0),
+                        duration_ms=row.get("duration_ms", 0),
+                        explicit=row.get("explicit", False),
+                        artists=row.get("artists", ""),
+                        id_artists=row.get("id_artists", ""),
+                        release_date=row.get("release_date", ""),
+                        danceability=row.get("danceability"),
+                        energy=row.get("energy"),
+                        key=row.get("key", 0),
+                        loudness=row.get("loudness"),
+                        mode=row.get("mode", 0),
+                        speechiness=row.get("speechiness"),
+                        acousticness=row.get("acousticness"),
+                        instrumentalness=row.get("instrumentalness"),
+                        liveness=row.get("liveness"),
+                        valence=row.get("valence"),
+                        tempo=row.get("tempo"),
+                        time_signature=row.get("time_signature", 4),
+                        cluster=predicted_cluster,
+                    )
+                )
+            else:
+                if existing.cluster != predicted_cluster:
+                    existing.cluster = predicted_cluster
+                    to_update.append(existing)
+
+        if to_create:
+            Track.objects.bulk_create(to_create, batch_size=10000)
+
+        if to_update:
+            Track.objects.bulk_update(
+                to_update,
+                ["cluster"],
+                batch_size=10000,
+            )
+
         transaction.set_autocommit(True)
 
         self.stdout.write(
             self.style.SUCCESS(
-                f"[INFO] {len(bulk_tracks)} faixas salvas com sucesso!"
+                f"[INFO] Upsert concluído: {len(to_create)} criadas, {len(to_update)} clusters atualizados."
             )
         )
 
-        if connection.vendor == "postgresql":
-            with connection.cursor() as c:
-                c.execute(f'ANALYZE "{Track._meta.db_table}";')
-
         # ======================================================
-        # 8) CALCULAR MEDIANAS E DESVIO PADRÃO POR CLUSTER
+        # 7) CALCULAR MEDIANAS E DESVIO PADRÃO POR CLUSTER
         # ======================================================
         self.stdout.write(
             self.style.SUCCESS("[INFO] Calculando medianas e desvios por cluster...")
@@ -309,7 +312,7 @@ class Command(BaseCommand):
         )
 
         # ============================
-        # TEMPO TOTAL DO PROCESSO
+        # 8) TEMPO TOTAL DO PROCESSO
         # ============================
         end_time = time.time()
         total_minutes = (end_time - start_time) / 60.0

@@ -1,5 +1,14 @@
 from django.urls import path 
-from .views import ArtistListView, RecommendationView, TracksByArtistView, TracksByNameView, TracksByClusterView, ClusterMetadataByClusterView
+from .views import (
+    ArtistListView,
+    TracksByArtistView,
+    TracksByNameView,
+    TracksByClusterView,
+    ClusterMetadataByClusterView,
+    RecommendationView,
+    RecommendationEvaluationSubmitView,
+    MyRecommendationEvaluationsView,
+)
 
 urlpatterns = [
     path('artists/', ArtistListView.as_view(), name='artists-list'),
@@ -8,4 +17,6 @@ urlpatterns = [
     path('clusters/<int:cluster_id>/tracks/', TracksByClusterView.as_view(), name='tracks-by-cluster'),
     path('clusters/<int:cluster_id>/metadata/', ClusterMetadataByClusterView.as_view(), name='cluster-metadata'),
     path('recommend/', RecommendationView.as_view(), name='recommend'),
+    path("recommendation-evaluations/", RecommendationEvaluationSubmitView.as_view(), name="submit-recommendation-evaluations"),
+    path("my-recommendation-evaluations/", MyRecommendationEvaluationsView.as_view(), name="my-recommendation-evaluations"),
 ]

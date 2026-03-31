@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useMemo, useState } from "react";
 import "../styles/Home.css";
 import "../styles/Recommender.css";
+import api from "../api";
 
 export default function RecommendationResults() {
   const location = useLocation();
@@ -29,8 +30,24 @@ export default function RecommendationResults() {
             >
               CB Music First Recommendation
             </h2>
+
+            <div className="header-nav">
+              <button className="header-button" onClick={() => navigate("/recommender")}>
+                Nova Recomendação
+              </button>
+
+              <button className="header-button" onClick={() => navigate("/my-recommendations")}>
+                Minhas Recomendações
+              </button>
+
+              <button className="header-button" onClick={() => navigate("/references")}>
+                Referências
+              </button>
+            </div>
           </div>
+
           <div className="header-right">
+            <span className="welcome-text">Olá, {username}</span>
             <button className="logout-button" onClick={handleLogout}>
               Sair
             </button>
@@ -50,7 +67,7 @@ export default function RecommendationResults() {
     );
   }
 
-  const { selected_track, random_list, variable_based_list } = data;
+  const { selected_track, random_list, variable_based_list, used_feature } = data;
 
   const toArray = (x) => (Array.isArray(x) ? x : []);
   const listRandom = toArray(random_list).slice(0, 3);
@@ -80,7 +97,7 @@ export default function RecommendationResults() {
 
   const getTrackId = (track, index) => track?.id || `${track?.name}-${index}`;
 
-  const submitEvaluation = () => {
+  const submitEvaluation = async () => {
     setErrorMsg("");
 
     for (const item of allDisplayedTracks) {
@@ -95,10 +112,51 @@ export default function RecommendationResults() {
       }
     }
 
-    console.log("Notas enviadas:", ratings);
+    try {
+      const payload = {
+        base_track_id: selected_track?.id,
+        used_feature: used_feature ?? null,
 
-    localStorage.setItem("EVALUATION_DATA", JSON.stringify(ratings));
-    navigate("/recommender");
+        base_track_name: selected_track?.name ?? "",
+        base_track_artists: selected_track?.artists ?? "",
+        recommendation_cluster: selected_track?.cluster ?? null,
+
+        items: [
+          ...listRandom.map((track, index) => ({
+            track_id: track.id,
+            order_in_list: index + 1,
+            list_type: "listRandom",
+            rating: Number(ratings[getTrackId(track, index)]),
+            base_metric: null,
+            recommendation_cluster: track.cluster ?? null,
+            recommended_track_name: track.name ?? "",
+            recommended_track_artists: track.artists ?? "",
+          })),
+          ...listVariableBased.map((track, index) => ({
+            track_id: track.id,
+            order_in_list: index + 1,
+            list_type: "listVariableBased",
+            rating: Number(ratings[getTrackId(track, index)]),
+            base_metric: used_feature ?? null,
+            recommendation_cluster: track.cluster ?? null,
+            recommended_track_name: track.name ?? "",
+            recommended_track_artists: track.artists ?? "",
+          })),
+        ],
+      };
+
+      const response = await api.post("/api/recommendation-evaluations/", payload);
+
+      console.log("Avaliações salvas:", response.data);
+
+      localStorage.removeItem("EVALUATION_DATA");
+      navigate("/recommender");
+    } catch (err) {
+      console.error(err);
+      setErrorMsg(
+        "Erro ao salvar a avaliação. Por favor, tente novamente mais tarde ou entre em contato com o Administrador."
+      );
+    }
   };
 
   const handleBackToRecommender = () => {

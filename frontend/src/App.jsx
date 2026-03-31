@@ -6,7 +6,8 @@ import Home from "./pages/Home"
 import NotFound from "./pages/NotFound"
 import ProtectedRoute from "./components/ProtectedRoute"
 import Recommender from "./pages/Recommender"
-import RecommendationResults from "./pages/RecommendationResults";
+import RecommendationResults from "./pages/RecommendationResults"
+import MyRecommendations from "./pages/MyRecommendations"
 
 function Logout() {
   localStorage.clear()
@@ -41,6 +42,14 @@ function App() {
           element={
             <ProtectedRoute>
               <RecommendationResults />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/my-recommendations"
+          element={
+            <ProtectedRoute>
+              <MyRecommendations />
             </ProtectedRoute>
           }
         />

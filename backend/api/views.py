@@ -1,15 +1,24 @@
+import os
 from django.contrib.auth.models import User
+from django.db import transaction
 from django.db.models import F, Value, FloatField
 from django.db.models.functions import Abs
 from django.db.models.expressions import ExpressionWrapper
-from rest_framework import generics
+from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated, AllowAny
 
-from .serializers import UserSerializer, TrackSerializer, ArtistNameSerializer, InputTrackSerializer, ClusterMetadataSerializer
-from .models import Track
-from .models import Track, ClusterMetadata
+from .serializers import (
+    UserSerializer,
+    TrackSerializer,
+    ArtistNameSerializer,
+    InputTrackSerializer,
+    ClusterMetadataSerializer,
+    RecommendationEvaluationSubmitSerializer,
+    MyRecommendationBatchSerializer,
+)
+from .models import Track, ClusterMetadata, RecommendationBatch, RecommendationEvaluation
 
 ALLOWED_SIMILARITY_FEATURES = {
     "danceability",
@@ -156,7 +165,7 @@ class RecommendationView(generics.GenericAPIView):
             com maior std_deviation no cluster
             + fallback: tenta a próxima feature mais variável se a 1ª não servir.
     """
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
     serializer_class = InputTrackSerializer
 
     def post(self, request):
@@ -236,4 +245,92 @@ class RecommendationView(generics.GenericAPIView):
                 "used_feature": used_feature,
                 "reference_feature_value": reference_feature_value,
             }
+        )
+
+class RecommendationEvaluationSubmitView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = RecommendationEvaluationSubmitSerializer
+
+    @transaction.atomic
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        data = serializer.validated_data
+        user = request.user
+
+        base_track = Track.objects.get(id=data["base_track_id"])
+
+        used_feature = data.get("used_feature") or None
+        strategy_version = data.get("strategy_version") or os.getenv("STRATEGY_VERSION")
+        dataset_version = data.get("dataset_version") or os.getenv("DATASET_NAME")
+        cluster_algorithm = data.get("cluster_algorithm") or os.getenv("ALGORITHM")
+
+        base_track_name = data.get("base_track_name") or base_track.name
+        base_track_artists = data.get("base_track_artists") or base_track.artists
+        batch_recommendation_cluster = data.get("recommendation_cluster", base_track.cluster)
+
+        batch = RecommendationBatch.objects.create(
+            user=user,
+            base_track=base_track,
+            base_track_name=base_track_name,
+            base_track_artists=base_track_artists,
+            recommendation_cluster=batch_recommendation_cluster,
+            used_feature=used_feature,
+            strategy_version=strategy_version,
+            dataset_version=dataset_version,
+            cluster_algorithm=cluster_algorithm,
+        )
+
+        evaluations = []
+
+        for item in data["items"]:
+            recommended_track = Track.objects.get(id=item["track_id"])
+
+            list_type = item["list_type"]
+            base_metric = None if list_type == "listRandom" else (item.get("base_metric") or used_feature)
+
+            recommended_track_name = item.get("recommended_track_name") or recommended_track.name
+            recommended_track_artists = item.get("recommended_track_artists") or recommended_track.artists
+
+            evaluations.append(
+                RecommendationEvaluation(
+                    batch=batch,
+                    user=user,
+                    base_track=base_track,
+                    recommended_track=recommended_track,
+                    order_in_list=item["order_in_list"],
+                    list_type=list_type,
+                    rating=item["rating"],
+                    base_metric=base_metric,
+                    recommendation_cluster=item.get("recommendation_cluster", recommended_track.cluster),
+                    recommended_track_name=recommended_track_name,
+                    recommended_track_artists=recommended_track_artists,
+                    strategy_version=strategy_version,
+                    dataset_version=dataset_version,
+                    cluster_algorithm=cluster_algorithm,
+                )
+            )
+
+        RecommendationEvaluation.objects.bulk_create(evaluations)
+
+        return Response(
+            {
+                "message": "Avaliações salvas com sucesso.",
+                "recommendation_id": batch.id,
+                "saved_items": len(evaluations),
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+class MyRecommendationEvaluationsView(generics.ListAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = MyRecommendationBatchSerializer
+    pagination_class = DefaultPagination
+
+    def get_queryset(self):
+        return (
+            RecommendationBatch.objects.filter(user=self.request.user)
+            .prefetch_related("evaluations")
+            .order_by("-created_at", "-id")
         )

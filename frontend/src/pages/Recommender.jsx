@@ -130,7 +130,7 @@ export default function Recommender() {
 
     } catch (err) {
       console.error(err);
-      setErrorMsg("Erro ao gerar recomendações.");
+      setErrorMsg("Erro ao gerar recomendações. Por favor, tente novamente mais tarde ou entre em contato com o Administrador.");
     } finally {
       setLoading(false);
     }
@@ -254,7 +254,7 @@ export default function Recommender() {
 
     } catch (err) {
       console.error(err);
-      setErrorMsg("Erro ao gerar recomendações.");
+      setErrorMsg("Erro ao gerar recomendações. Por favor, tente novamente mais tarde ou entre em contato com o Administrador.");
     } finally {
       setLoading(false);
     }
@@ -343,8 +343,8 @@ export default function Recommender() {
             value={searchType}
             onChange={(e) => handleSearchTypeChange(e.target.value)}
           >
-            <option value="tracks">Tracks (por nome da música)</option>
-            <option value="artist">Selecionar artista e depois filtrar músicas</option>
+            <option value="tracks">Por música</option>
+            <option value="artist">Por artista</option>
           </select>
         </div>
 
