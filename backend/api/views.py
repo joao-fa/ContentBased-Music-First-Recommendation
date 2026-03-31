@@ -4,6 +4,7 @@ from django.db import transaction
 from django.db.models import F, Value, FloatField
 from django.db.models.functions import Abs
 from django.db.models.expressions import ExpressionWrapper
+from django.http import JsonResponse
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
@@ -31,6 +32,24 @@ ALLOWED_SIMILARITY_FEATURES = {
     "liveness",
     "speechiness",
 }
+
+def health_view(request):
+    return JsonResponse({"status": "ok"}, status=200)
+
+def ready_view(request):
+    track_count = Track.objects.count()
+    cluster_metadata_count = ClusterMetadata.objects.count()
+
+    ready = track_count > 0 and cluster_metadata_count > 0
+
+    return JsonResponse(
+        {
+            "status": "ready" if ready else "initializing",
+            "tracks": track_count,
+            "cluster_metadata": cluster_metadata_count,
+        },
+        status=200 if ready else 503,
+    )
 
 class CreateUserView(generics.CreateAPIView):
     queryset = User.objects.all()

@@ -88,6 +88,7 @@ class ApiConfig(AppConfig):
                         cur.execute("SELECT pg_advisory_unlock( hashtext(%s) );", ["bootstrap_tracks_v1"])
             except Exception:
                 pass
-
+            
+        logger.info("[BOOTSTRAP] Thread de bootstrap criada.")
         t = threading.Thread(target=bootstrap, daemon=True)
         t.start()

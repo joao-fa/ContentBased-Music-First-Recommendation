@@ -163,10 +163,25 @@ class Command(BaseCommand):
         records = final_dataframe.to_dict("records")
         incoming_ids = [row["id"] for row in records]
 
+        self.stdout.write(self.style.SUCCESS(
+            f"[INFO] Total de registros finais: {len(records)}"
+        ))
+        self.stdout.write(self.style.SUCCESS(
+            f"[INFO] Total de IDs recebidos: {len(incoming_ids)}"
+        ))
+
         existing_tracks = Track.objects.in_bulk(incoming_ids)
+
+        self.stdout.write(self.style.SUCCESS(
+            f"[INFO] Tracks já existentes no banco: {len(existing_tracks)}"
+        ))
 
         to_create = []
         to_update = []
+
+        self.stdout.write(self.style.SUCCESS(
+            "[INFO] Separando registros entre criação e atualização..."
+        ))
 
         for row in records:
             track_id = row["id"]
@@ -206,14 +221,20 @@ class Command(BaseCommand):
                     to_update.append(existing)
 
         if to_create:
-            Track.objects.bulk_create(to_create, batch_size=10000)
+            self.stdout.write(self.style.SUCCESS(
+                f"[INFO] Executando bulk_create de {len(to_create)} tracks..."
+            ))
+            Track.objects.bulk_create(to_create, batch_size=1000)
 
         if to_update:
-            Track.objects.bulk_update(
-                to_update,
-                ["cluster"],
-                batch_size=10000,
-            )
+            self.stdout.write(self.style.SUCCESS(
+                f"[INFO] Executando bulk_update de {len(to_update)} tracks..."
+            ))
+            Track.objects.bulk_update(to_update, ["cluster"], batch_size=1000)
+        
+        self.stdout.write(self.style.SUCCESS(
+            f"[INFO] Preparação concluída: {len(to_create)} para criar, {len(to_update)} para atualizar."
+        ))
 
         transaction.set_autocommit(True)
 
