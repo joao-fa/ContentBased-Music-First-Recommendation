@@ -8,6 +8,7 @@ from django.conf import settings
 from django.db import connection, transaction
 from dotenv import load_dotenv
 
+from app_logger import AppLogger
 from recommender.utils.read_dataset import ReadCSVDataset
 from recommender.models.data_clustering import DataClustering
 from recommender.models.predict_new_track import PredictNewTrack
@@ -24,10 +25,9 @@ class Command(BaseCommand):
         start_time = time.time()
         cluster_time = None
         metadata_time = None
+        logger = AppLogger(__name__)
 
-        self.stdout.write(
-            self.style.SUCCESS("[INFO] Iniciando sistema...")
-        )
+        logger.info("[INFO] Iniciando sistema...")
 
         load_dotenv()
         dataset_name = os.getenv("DATASET_NAME")
@@ -51,9 +51,7 @@ class Command(BaseCommand):
             settings.BASE_DIR, "api", "data", "trained_models", f"{model_name}.pkl"
         )
 
-        self.stdout.write(
-            self.style.SUCCESS("[INFO] Iniciando carregamento e normalização do dataset...")
-        )
+        logger.info("[INFO] Iniciando carregamento e normalização do dataset...")
 
         # ======================================================
         # 1) Lê dataset bruto
@@ -62,9 +60,7 @@ class Command(BaseCommand):
         dataframe = dataset_reader.execute()
 
         if dataframe is None or dataframe.empty:
-            self.stdout.write(self.style.ERROR(
-                f"[ERRO] Dataset '{dataset_name}' não pôde ser carregado."
-            ))
+            logger.error(f"[ERRO] Dataset '{dataset_name}' não pôde ser carregado.")
             return
 
         # ======================================================
@@ -77,18 +73,11 @@ class Command(BaseCommand):
         # 3) Clusterização (se necessário)
         # ======================================================
         if os.path.exists(model_path):
-            self.stdout.write(
-                self.style.SUCCESS(
-                    f"[INFO] Modelo existente encontrado em '{model_path}', "
-                    "pulando clusterização..."
-                )
+            logger.info(
+                f"[INFO] Modelo existente encontrado em '{model_path}', pulando clusterização..."
             )
         else:
-            self.stdout.write(
-                self.style.SUCCESS(
-                    "[INFO] Modelo não encontrado, iniciando clusterização..."
-                )
-            )
+            logger.info("[INFO] Modelo não encontrado, iniciando clusterização...")
             cluster_start = time.time()
 
             data_clustering = DataClustering(
@@ -103,20 +92,12 @@ class Command(BaseCommand):
             cluster_end = time.time()
             cluster_time = (cluster_end - cluster_start) / 60.0
 
-            self.stdout.write(
-                self.style.SUCCESS(
-                    f"[INFO] Clusterização concluída em {cluster_time:.2f} minutos."
-                )
-            )
+            logger.info(f"[INFO] Clusterização concluída em {cluster_time:.2f} minutos.")
 
         # ======================================================
         # 4) Predição de cluster para cada faixa (vetorizada)
         # ======================================================
-        self.stdout.write(
-            self.style.SUCCESS(
-                "[INFO] Iniciando predição de clusters para todas as faixas..."
-            )
-        )
+        logger.info("[INFO] Iniciando predição de clusters para todas as faixas...")
 
         predictor = PredictNewTrack(
             normalized_dataframe,
@@ -134,54 +115,40 @@ class Command(BaseCommand):
             [normalizer.metadata_dataframe, predicted_dataframe],
             axis=1,
         )
-        
+
         expected = ["popularity", "duration_ms", "key", "mode", "time_signature"]
         missing = [c for c in expected if c not in final_dataframe.columns]
         if missing:
-            self.stdout.write(self.style.WARNING(
+            logger.warning(
                 f"[WARN] Colunas originais ausentes no final_dataframe: {missing}"
-            ))
+            )
 
         # ======================================================
         # 6) UPSERT da tabela Track
         # ======================================================
-        self.stdout.write(
-            self.style.SUCCESS(
-                "[INFO] Atualizando tabela 'Track'..."
-            )
-        )
+        logger.info("[INFO] Atualizando tabela 'Track'...")
 
         existing_tables = connection.introspection.table_names()
         if Track._meta.db_table not in existing_tables:
-            self.stdout.write(
-                self.style.ERROR(
-                    f"[ERRO] A tabela '{Track._meta.db_table}' não existe. Rode as migrações antes do bootstrap."
-                )
+            logger.error(
+                f"[ERRO] A tabela '{Track._meta.db_table}' não existe. Rode as migrações antes do bootstrap."
             )
             return
 
         records = final_dataframe.to_dict("records")
         incoming_ids = [row["id"] for row in records]
 
-        self.stdout.write(self.style.SUCCESS(
-            f"[INFO] Total de registros finais: {len(records)}"
-        ))
-        self.stdout.write(self.style.SUCCESS(
-            f"[INFO] Total de IDs recebidos: {len(incoming_ids)}"
-        ))
+        logger.info(f"[INFO] Total de registros finais: {len(records)}")
+        logger.info(f"[INFO] Total de IDs recebidos: {len(incoming_ids)}")
 
         existing_tracks = Track.objects.in_bulk(incoming_ids)
 
-        self.stdout.write(self.style.SUCCESS(
-            f"[INFO] Tracks já existentes no banco: {len(existing_tracks)}"
-        ))
+        logger.info(f"[INFO] Tracks já existentes no banco: {len(existing_tracks)}")
 
         to_create = []
         to_update = []
 
-        self.stdout.write(self.style.SUCCESS(
-            "[INFO] Separando registros entre criação e atualização..."
-        ))
+        logger.info("[INFO] Separando registros entre criação e atualização...")
 
         for row in records:
             track_id = row["id"]
@@ -220,36 +187,28 @@ class Command(BaseCommand):
                     existing.cluster = predicted_cluster
                     to_update.append(existing)
 
+        logger.info(
+            f"[INFO] Preparação concluída: {len(to_create)} para criar, {len(to_update)} para atualizar."
+        )
+
         if to_create:
-            self.stdout.write(self.style.SUCCESS(
-                f"[INFO] Executando bulk_create de {len(to_create)} tracks..."
-            ))
+            logger.info(f"[INFO] Executando bulk_create de {len(to_create)} tracks...")
             Track.objects.bulk_create(to_create, batch_size=1000)
 
         if to_update:
-            self.stdout.write(self.style.SUCCESS(
-                f"[INFO] Executando bulk_update de {len(to_update)} tracks..."
-            ))
+            logger.info(f"[INFO] Executando bulk_update de {len(to_update)} tracks...")
             Track.objects.bulk_update(to_update, ["cluster"], batch_size=1000)
-        
-        self.stdout.write(self.style.SUCCESS(
-            f"[INFO] Preparação concluída: {len(to_create)} para criar, {len(to_update)} para atualizar."
-        ))
 
         transaction.set_autocommit(True)
 
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"[INFO] Upsert concluído: {len(to_create)} criadas, {len(to_update)} clusters atualizados."
-            )
+        logger.info(
+            f"[INFO] Upsert concluído: {len(to_create)} criadas, {len(to_update)} clusters atualizados."
         )
 
         # ======================================================
         # 7) CALCULAR MEDIANAS E DESVIO PADRÃO POR CLUSTER
         # ======================================================
-        self.stdout.write(
-            self.style.SUCCESS("[INFO] Calculando medianas e desvios por cluster...")
-        )
+        logger.info("[INFO] Calculando medianas e desvios por cluster...")
 
         metadata_insert_start = time.time()
 
@@ -260,18 +219,10 @@ class Command(BaseCommand):
                 cursor.execute(
                     f'TRUNCATE TABLE "{ClusterMetadata._meta.db_table}" RESTART IDENTITY CASCADE;'
                 )
-            self.stdout.write(
-                self.style.SUCCESS(
-                    "[INFO] Tabela 'ClusterMetadata' truncada com sucesso (Postgres)."
-                )
-            )
+            logger.info("[INFO] Tabela 'ClusterMetadata' truncada com sucesso (Postgres).")
         else:
             ClusterMetadata.objects.all().delete()
-            self.stdout.write(
-                self.style.SUCCESS(
-                    "[INFO] Tabela 'ClusterMetadata' limpa com sucesso (delete)."
-                )
-            )
+            logger.info("[INFO] Tabela 'ClusterMetadata' limpa com sucesso (delete).")
 
         feature_columns = list(normalizer.reduced_dataframe.columns)
 
@@ -332,11 +283,7 @@ class Command(BaseCommand):
         metadata_insert_end = time.time()
         metadata_time = (metadata_insert_end - metadata_insert_start) / 60.0
 
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"[INFO] Metadados calculados e inseridos em {metadata_time:.2f} minutos."
-            )
-        )
+        logger.info(f"[INFO] Metadados calculados e inseridos em {metadata_time:.2f} minutos.")
 
         # ============================
         # 8) TEMPO TOTAL DO PROCESSO
@@ -344,29 +291,13 @@ class Command(BaseCommand):
         end_time = time.time()
         total_minutes = (end_time - start_time) / 60.0
 
-        self.stdout.write(self.style.SUCCESS("========== RESUMO DE TEMPO =========="))
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"[INFO] Tempo total do pipeline: {total_minutes:.2f} minutos."
-            )
-        )
+        logger.info("========== RESUMO DE TEMPO ==========")
+        logger.info(f"[INFO] Tempo total do pipeline: {total_minutes:.2f} minutos.")
 
         if cluster_time is not None:
-            self.stdout.write(
-                self.style.SUCCESS(
-                    f"[INFO] Tempo de clusterização: {cluster_time:.2f} minutos."
-                )
-            )
+            logger.info(f"[INFO] Tempo de clusterização: {cluster_time:.2f} minutos.")
         else:
-            self.stdout.write(
-                self.style.SUCCESS(
-                    "[INFO] Tempo de clusterização: pulado (modelo já existia)."
-                )
-            )
+            logger.info("[INFO] Tempo de clusterização: pulado (modelo já existia).")
 
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"[INFO] Tempo de cálculo de metadados: {metadata_time:.2f} minutos."
-            )
-        )
-        self.stdout.write(self.style.SUCCESS("====================================="))
+        logger.info(f"[INFO] Tempo de cálculo de metadados: {metadata_time:.2f} minutos.")
+        logger.info("=====================================")
