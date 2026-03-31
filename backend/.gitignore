@@ -1,6 +1,5 @@
 .env
 db.sqlite3
-api/data/datasets/
 api/data/clusters_management/
 
 **/__pycache__/
