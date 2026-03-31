@@ -36,8 +36,6 @@ class Command(BaseCommand):
         num_clusters = int(os.getenv("NUM_CLUSTERS"))
         apply_scale = os.getenv("APPLY_SCALE") == "True"
 
-        return
-
         if algorithm == "kmeans":
             model_name = (
                 f"ALG_{algorithm}_RET_{dataset_retention}_"
