@@ -5,7 +5,7 @@ from django.conf import settings
 
 class Track(models.Model):
     id = models.CharField(primary_key=True, max_length=50)
-    name = models.CharField(max_length=255)
+    name = models.TextField()
     popularity = models.IntegerField(null=True, blank=True)
     duration_ms = models.IntegerField(null=True, blank=True)
     explicit = models.BooleanField(default=False)
