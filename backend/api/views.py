@@ -33,8 +33,13 @@ ALLOWED_SIMILARITY_FEATURES = {
     "speechiness",
 }
 
+
+# ======================================================
+# HEALTHCHECKS E PRONTIDÃO DA API
+# ======================================================
 def health_view(request):
     return JsonResponse({"status": "ok"}, status=200)
+
 
 def ready_view(request):
     track_count = Track.objects.count()
@@ -51,20 +56,30 @@ def ready_view(request):
         status=200 if ready else 503,
     )
 
+
+# ======================================================
+# USUÁRIOS E PAGINAÇÃO
+# ======================================================
 class CreateUserView(generics.CreateAPIView):
     queryset = User.objects.all()
     serializer_class = UserSerializer
     permission_classes = [AllowAny]
+
 
 class DefaultPagination(PageNumberPagination):
     page_size = 100
     page_size_query_param = 'page_size'
     max_page_size = 1000
 
+
+# ======================================================
+# CONSULTAS DE ARTISTAS E FAIXAS
+# ======================================================
 class ArtistListView(generics.ListAPIView):
     """
     GET /api/artists/?q=<filtro_parcial_opcional>
-    Retorna artistas únicos (normalizados) com paginação.
+
+    Retorna artistas únicos normalizados, com paginação.
     """
     permission_classes = [AllowAny]
     serializer_class = ArtistNameSerializer
@@ -100,11 +115,14 @@ class ArtistListView(generics.ListAPIView):
         serializer = self.get_serializer(data, many=True)
         return Response(serializer.data)
 
+
 class TracksByArtistView(generics.ListAPIView):
     """
-    GET /api/artists/<artist_name>/tracks/?exact=true|false (padrão: false)
-    Opcional:
-        ?q=termo   -> filtra também pelo nome da música (name__icontains)
+    GET /api/artists/<artist_name>/tracks/?exact=true|false
+
+    Parâmetros:
+    - exact: define se o match do artista deve ser exato
+    - q: filtra opcionalmente também pelo nome da faixa
     """
     permission_classes = [AllowAny]
     serializer_class = TrackSerializer
@@ -127,11 +145,13 @@ class TracksByArtistView(generics.ListAPIView):
 
         return qs
 
+
 class TracksByNameView(generics.ListAPIView):
     """
     GET /api/tracks/?q=<parte_do_nome>
-    Retorna faixas cujo nome contenha a string informada (case-insensitive).
-    Caso 'q' não seja informado, retorna as N primeiras faixas (paginadas).
+
+    Retorna faixas cujo nome contenha a string informada.
+    Caso 'q' não seja informado, retorna as faixas paginadas.
     """
     permission_classes = [AllowAny]
     serializer_class = TrackSerializer
@@ -144,9 +164,11 @@ class TracksByNameView(generics.ListAPIView):
             return Track.objects.filter(name__icontains=query).order_by("name")
         return Track.objects.all()
 
+
 class TracksByClusterView(generics.ListAPIView):
     """
-    GET /api/clusters/<cluster_id>/tracks/    
+    GET /api/clusters/<cluster_id>/tracks/
+
     Retorna todas as faixas pertencentes a um mesmo cluster.
     """
     permission_classes = [AllowAny]
@@ -158,10 +180,12 @@ class TracksByClusterView(generics.ListAPIView):
         qs = Track.objects.filter(cluster=cluster_id).order_by("name")
         return qs
 
+
 class ClusterMetadataByClusterView(generics.GenericAPIView):
     """
     GET /api/clusters/<cluster_id>/metadata/
-    Retorna metadados do cluster:
+
+    Retorna os metadados agregados do cluster informado.
     """
     permission_classes = [AllowAny]
     serializer_class = ClusterMetadataSerializer
@@ -175,14 +199,18 @@ class ClusterMetadataByClusterView(generics.GenericAPIView):
             "metadata": data,
         })
 
+
+# ======================================================
+# RECOMENDAÇÃO
+# ======================================================
 class RecommendationView(generics.GenericAPIView):
     """
     POST /api/recommend/
-    Retorna 2 listas:
-      - 1: N faixas aleatórias no mesmo cluster da faixa base
-      - 2: N faixas do mesmo cluster mais próximas do valor da feature
-            com maior std_deviation no cluster
-            + fallback: tenta a próxima feature mais variável se a 1ª não servir.
+
+    Retorna duas listas:
+    - random_list: faixas aleatórias do mesmo cluster da faixa base
+    - variable_based_list: faixas do mesmo cluster mais próximas na feature
+      com maior desvio-padrão válido para comparação
     """
     permission_classes = [IsAuthenticated]
     serializer_class = InputTrackSerializer
@@ -253,7 +281,7 @@ class RecommendationView(generics.GenericAPIView):
             )
 
             variable_based_list = TrackSerializer(qs_similar, many=True).data
-            break 
+            break
 
         return Response(
             {
@@ -266,6 +294,10 @@ class RecommendationView(generics.GenericAPIView):
             }
         )
 
+
+# ======================================================
+# AVALIAÇÃO DAS RECOMENDAÇÕES
+# ======================================================
 class RecommendationEvaluationSubmitView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = RecommendationEvaluationSubmitSerializer
@@ -342,6 +374,10 @@ class RecommendationEvaluationSubmitView(generics.GenericAPIView):
             status=status.HTTP_201_CREATED,
         )
 
+
+# ======================================================
+# HISTÓRICO DO USUÁRIO
+# ======================================================
 class MyRecommendationEvaluationsView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = MyRecommendationBatchSerializer

@@ -1,10 +1,11 @@
+import gc
 import os
 import time
-import pandas as pd
 from io import StringIO
 
-from django.core.management.base import BaseCommand
+import pandas as pd
 from django.conf import settings
+from django.core.management.base import BaseCommand
 from django.db import connection, transaction
 from dotenv import load_dotenv
 
@@ -19,9 +20,9 @@ from api.models import Track, ClusterMetadata
 
 class Command(BaseCommand):
     def handle(self, *args, **options):
-        # ============================
-        # INÍCIO DO PROCESSO
-        # ============================
+        # ======================================================
+        # 1) INICIALIZAÇÃO DO PROCESSO
+        # ======================================================
         start_time = time.time()
         cluster_time = None
         metadata_time = None
@@ -54,7 +55,7 @@ class Command(BaseCommand):
         logger.info("[INFO] Iniciando carregamento e normalização do dataset...")
 
         # ======================================================
-        # 1) Lê dataset bruto
+        # 2) LEITURA DO DATASET BRUTO
         # ======================================================
         dataset_reader = ReadCSVDataset(dataset_name)
         dataframe = dataset_reader.execute()
@@ -64,13 +65,17 @@ class Command(BaseCommand):
             return
 
         # ======================================================
-        # 2) Normalizador decide quais colunas serão consideradas
+        # 3) NORMALIZAÇÃO E PREPARAÇÃO DAS FEATURES
         # ======================================================
         normalizer = SpotifyDatabaseNormalizer(dataframe)
         normalized_dataframe = normalizer.execute(apply_scale, dataset_retention)
 
+        feature_columns = list(normalizer.reduced_dataframe.columns)
+        del dataframe
+        gc.collect()
+
         # ======================================================
-        # 3) Clusterização (se necessário)
+        # 4) CLUSTERIZAÇÃO (SE NECESSÁRIO)
         # ======================================================
         if os.path.exists(model_path):
             logger.info(
@@ -87,7 +92,11 @@ class Command(BaseCommand):
                 feature_columns=list(normalizer.reduced_dataframe.columns),
             )
             use_minibatch = os.getenv("USE_MINIBATCH", "False") == "True"
-            data_clustering.execute(algorithm, num_clusters, use_minibatch=use_minibatch)
+            data_clustering.execute(
+                algorithm,
+                num_clusters,
+                use_minibatch=use_minibatch,
+            )
 
             cluster_end = time.time()
             cluster_time = (cluster_end - cluster_start) / 60.0
@@ -95,7 +104,7 @@ class Command(BaseCommand):
             logger.info(f"[INFO] Clusterização concluída em {cluster_time:.2f} minutos.")
 
         # ======================================================
-        # 4) Predição de cluster para cada faixa (vetorizada)
+        # 5) PREDIÇÃO DE CLUSTERS PARA TODAS AS FAIXAS
         # ======================================================
         logger.info("[INFO] Iniciando predição de clusters para todas as faixas...")
 
@@ -107,9 +116,11 @@ class Command(BaseCommand):
         predicted_dataframe = predictor.execute()
         predicted_dataframe.reset_index(drop=True, inplace=True)
         normalizer.metadata_dataframe.reset_index(drop=True, inplace=True)
+        del normalized_dataframe
+        gc.collect()
 
         # ======================================================
-        # 5) DataFrame final para a tabela Track
+        # 6) MONTAGEM DO DATAFRAME FINAL PARA PERSISTÊNCIA
         # ======================================================
         final_dataframe = pd.concat(
             [normalizer.metadata_dataframe, predicted_dataframe],
@@ -123,8 +134,12 @@ class Command(BaseCommand):
                 f"[WARN] Colunas originais ausentes no final_dataframe: {missing}"
             )
 
+        del predicted_dataframe
+        del normalizer.metadata_dataframe
+        gc.collect()
+
         # ======================================================
-        # 6) UPSERT da tabela Track
+        # 7) UPSERT DA TABELA TRACK
         # ======================================================
         logger.info("[INFO] Atualizando tabela 'Track'...")
 
@@ -135,78 +150,109 @@ class Command(BaseCommand):
             )
             return
 
-        records = final_dataframe.to_dict("records")
-        incoming_ids = [row["id"] for row in records]
+        total_rows = len(final_dataframe)
+        logger.info(f"[INFO] Total de registros finais: {total_rows}")
 
-        logger.info(f"[INFO] Total de registros finais: {len(records)}")
-        logger.info(f"[INFO] Total de IDs recebidos: {len(incoming_ids)}")
+        chunk_size = 5000
+        total_created = 0
+        total_updated = 0
 
-        existing_tracks = Track.objects.in_bulk(incoming_ids)
+        for start in range(0, total_rows, chunk_size):
+            end = min(start + chunk_size, total_rows)
 
-        logger.info(f"[INFO] Tracks já existentes no banco: {len(existing_tracks)}")
+            chunk_df = final_dataframe.iloc[start:end].copy()
+            incoming_ids = chunk_df["id"].tolist()
 
-        to_create = []
-        to_update = []
+            logger.info(
+                f"[INFO] Processando chunk {start}:{end} com {len(incoming_ids)} IDs..."
+            )
 
-        logger.info("[INFO] Separando registros entre criação e atualização...")
+            existing_tracks = Track.objects.in_bulk(incoming_ids)
+            logger.info(
+                f"[INFO] Tracks já existentes neste chunk: {len(existing_tracks)}"
+            )
 
-        for row in records:
-            track_id = row["id"]
-            predicted_cluster = row.get("cluster")
+            to_create = []
+            to_update = []
 
-            existing = existing_tracks.get(track_id)
+            logger.info("[INFO] Separando registros entre criação e atualização neste chunk...")
 
-            if existing is None:
-                to_create.append(
-                    Track(
-                        id=row["id"],
-                        name=row["name"],
-                        popularity=row.get("popularity", 0),
-                        duration_ms=row.get("duration_ms", 0),
-                        explicit=row.get("explicit", False),
-                        artists=row.get("artists", ""),
-                        id_artists=row.get("id_artists", ""),
-                        release_date=row.get("release_date", ""),
-                        danceability=row.get("danceability"),
-                        energy=row.get("energy"),
-                        key=row.get("key", 0),
-                        loudness=row.get("loudness"),
-                        mode=row.get("mode", 0),
-                        speechiness=row.get("speechiness"),
-                        acousticness=row.get("acousticness"),
-                        instrumentalness=row.get("instrumentalness"),
-                        liveness=row.get("liveness"),
-                        valence=row.get("valence"),
-                        tempo=row.get("tempo"),
-                        time_signature=row.get("time_signature", 4),
-                        cluster=predicted_cluster,
+            chunk_records = chunk_df.to_dict("records")
+
+            for row in chunk_records:
+                track_id = row["id"]
+                predicted_cluster = row.get("cluster")
+
+                existing = existing_tracks.get(track_id)
+
+                if existing is None:
+                    to_create.append(
+                        Track(
+                            id=row["id"],
+                            name=row["name"],
+                            popularity=row.get("popularity", 0),
+                            duration_ms=row.get("duration_ms", 0),
+                            explicit=row.get("explicit", False),
+                            artists=row.get("artists", ""),
+                            id_artists=row.get("id_artists", ""),
+                            release_date=row.get("release_date", ""),
+                            danceability=row.get("danceability"),
+                            energy=row.get("energy"),
+                            key=row.get("key", 0),
+                            loudness=row.get("loudness"),
+                            mode=row.get("mode", 0),
+                            speechiness=row.get("speechiness"),
+                            acousticness=row.get("acousticness"),
+                            instrumentalness=row.get("instrumentalness"),
+                            liveness=row.get("liveness"),
+                            valence=row.get("valence"),
+                            tempo=row.get("tempo"),
+                            time_signature=row.get("time_signature", 4),
+                            cluster=predicted_cluster,
+                        )
                     )
-                )
-            else:
-                if existing.cluster != predicted_cluster:
-                    existing.cluster = predicted_cluster
-                    to_update.append(existing)
+                else:
+                    if existing.cluster != predicted_cluster:
+                        existing.cluster = predicted_cluster
+                        to_update.append(existing)
 
-        logger.info(
-            f"[INFO] Preparação concluída: {len(to_create)} para criar, {len(to_update)} para atualizar."
-        )
+            logger.info(
+                f"[INFO] Preparação do chunk concluída: {len(to_create)} para criar, {len(to_update)} para atualizar."
+            )
 
-        if to_create:
-            logger.info(f"[INFO] Executando bulk_create de {len(to_create)} tracks...")
-            Track.objects.bulk_create(to_create, batch_size=1000)
+            if to_create:
+                logger.info(f"[INFO] Executando bulk_create de {len(to_create)} tracks neste chunk...")
+                Track.objects.bulk_create(to_create, batch_size=1000)
+                total_created += len(to_create)
 
-        if to_update:
-            logger.info(f"[INFO] Executando bulk_update de {len(to_update)} tracks...")
-            Track.objects.bulk_update(to_update, ["cluster"], batch_size=1000)
+            if to_update:
+                logger.info(f"[INFO] Executando bulk_update de {len(to_update)} tracks neste chunk...")
+                Track.objects.bulk_update(to_update, ["cluster"], batch_size=1000)
+                total_updated += len(to_update)
+
+            logger.info(
+                f"[INFO] Chunk {start}:{end} concluído — criadas={len(to_create)}, atualizadas={len(to_update)}"
+            )
+            del chunk_df
+            del incoming_ids
+            del existing_tracks
+            del to_create
+            del to_update
+            del chunk_records
+            gc.collect()
 
         transaction.set_autocommit(True)
 
         logger.info(
-            f"[INFO] Upsert concluído: {len(to_create)} criadas, {len(to_update)} clusters atualizados."
+            f"[INFO] Upsert concluído: {total_created} criadas, {total_updated} clusters atualizados."
         )
 
+        del final_dataframe
+        del normalizer
+        gc.collect()
+
         # ======================================================
-        # 7) CALCULAR MEDIANAS E DESVIO PADRÃO POR CLUSTER
+        # 8) CÁLCULO DE MEDIANAS E DESVIO PADRÃO POR CLUSTER
         # ======================================================
         logger.info("[INFO] Calculando medianas e desvios por cluster...")
 
@@ -245,6 +291,7 @@ class Command(BaseCommand):
             GROUP BY "cluster"
             ORDER BY "cluster";
         '''
+
         with connection.cursor() as cursor:
             cursor.execute('SET LOCAL statement_timeout = 600000;')
             cursor.execute(sql)
@@ -285,9 +332,9 @@ class Command(BaseCommand):
 
         logger.info(f"[INFO] Metadados calculados e inseridos em {metadata_time:.2f} minutos.")
 
-        # ============================
-        # 8) TEMPO TOTAL DO PROCESSO
-        # ============================
+        # ======================================================
+        # 9) RESUMO FINAL DE EXECUÇÃO
+        # ======================================================
         end_time = time.time()
         total_minutes = (end_time - start_time) / 60.0
 
