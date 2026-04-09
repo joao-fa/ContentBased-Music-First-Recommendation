@@ -270,8 +270,6 @@ class Command(BaseCommand):
             ClusterMetadata.objects.all().delete()
             logger.info("[INFO] Tabela 'ClusterMetadata' limpa com sucesso (delete).")
 
-        feature_columns = list(normalizer.reduced_dataframe.columns)
-
         select_parts = []
         for col in feature_columns:
             col_quoted = f'"{col}"'
