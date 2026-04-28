@@ -353,3 +353,34 @@
     margin-left: 0;
   }
 }
+
+.language-impact-card {
+  margin-top: 2rem;
+  padding: 16px;
+  border-radius: 12px;
+  background: #f9fafb;
+  border: 1px solid #dbe3ee;
+}
+
+.language-impact-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 14px;
+  color: #1f2937;
+}
+
+.language-impact-options label,
+.language-impact-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.language-impact-checkbox {
+  grid-column: 1 / -1;
+  margin-top: 4px;
+  font-size: 13px;
+  color: #475569;
+}

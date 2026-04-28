@@ -14,7 +14,7 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = ["id", "username", "password"]
         extra_kwargs = {"password": {"write_only": True}}
-    
+
     def create(self, validated_data):
         user = User.objects.create_user(**validated_data)
         return user
@@ -22,7 +22,7 @@ class UserSerializer(serializers.ModelSerializer):
 class TrackSerializer(serializers.ModelSerializer):
     class Meta:
         model = Track
-        fields = '__all__'
+        fields = "__all__"
 
 class ArtistNameSerializer(serializers.Serializer):
     name = serializers.CharField()
@@ -52,6 +52,9 @@ class RecommendationEvaluationItemSerializer(serializers.Serializer):
     order_in_list = serializers.IntegerField(min_value=1)
     list_type = serializers.ChoiceField(choices=["listRandom", "listVariableBased"])
     rating = serializers.IntegerField(min_value=0, max_value=10)
+
+    language_influenced_rating = serializers.BooleanField(required=False, default=False)
+
     base_metric = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     recommendation_cluster = serializers.IntegerField(required=False, allow_null=True)
 
@@ -63,9 +66,21 @@ class RecommendationEvaluationSubmitSerializer(serializers.Serializer):
     base_track_id = serializers.CharField()
     used_feature = serializers.CharField(required=False, allow_null=True, allow_blank=True)
 
-    strategy_version = serializers.CharField(max_length=50, allow_blank=True, default=os.getenv("STRATEGY_VERSION"))
-    dataset_version = serializers.CharField(max_length=100, allow_blank=True, default=os.getenv("DATASET_NAME"))
-    cluster_algorithm = serializers.CharField(max_length=100, allow_blank=True, default=os.getenv("ALGORITHM"))
+    strategy_version = serializers.CharField(
+        max_length=50,
+        allow_blank=True,
+        default=os.getenv("STRATEGY_VERSION")
+    )
+    dataset_version = serializers.CharField(
+        max_length=100,
+        allow_blank=True,
+        default=os.getenv("DATASET_NAME")
+    )
+    cluster_algorithm = serializers.CharField(
+        max_length=100,
+        allow_blank=True,
+        default=os.getenv("ALGORITHM")
+    )
 
     base_track_name = serializers.CharField(required=False, allow_blank=True)
     base_track_artists = serializers.CharField(required=False, allow_blank=True)
@@ -107,6 +122,7 @@ class MyRecommendationEvaluationItemSerializer(serializers.ModelSerializer):
             "recommended_track_name",
             "recommended_track_artists",
             "rating",
+            "language_influenced_rating",
             "list_type",
             "order_in_list",
             "created_at",

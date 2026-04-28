@@ -29,7 +29,6 @@ class Track(models.Model):
     def __str__(self):
         return f"{self.name} - {self.artists}"
 
-from django.db import models
 
 class ClusterMetadata(models.Model):
     cluster = models.IntegerField()
@@ -65,9 +64,24 @@ class RecommendationBatch(models.Model):
     recommendation_cluster = models.IntegerField(null=True, blank=True)
 
     used_feature = models.CharField(max_length=100, null=True, blank=True)
-    strategy_version = models.CharField(max_length=50, blank=True, null=True, default=os.getenv("STRATEGY_VERSION"))
-    dataset_version = models.CharField(max_length=100, blank=True, null=True, default=os.getenv("DATASET_NAME"))
-    cluster_algorithm = models.CharField(max_length=100, blank=True, null=True, default=os.getenv("ALGORITHM"))
+    strategy_version = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        default=os.getenv("STRATEGY_VERSION")
+    )
+    dataset_version = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        default=os.getenv("DATASET_NAME")
+    )
+    cluster_algorithm = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        default=os.getenv("ALGORITHM")
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -108,15 +122,32 @@ class RecommendationEvaluation(models.Model):
     list_type = models.CharField(max_length=30, choices=LIST_TYPE_CHOICES)
     rating = models.PositiveSmallIntegerField()
 
+    language_influenced_rating = models.BooleanField(default=False)
+
     base_metric = models.CharField(max_length=100, null=True, blank=True)
     recommendation_cluster = models.IntegerField(null=True, blank=True)
 
     recommended_track_name = models.CharField(max_length=255, null=True, blank=True)
     recommended_track_artists = models.TextField(blank=True, default="")
 
-    strategy_version = models.CharField(max_length=50, blank=True, null=True, default=os.getenv("STRATEGY_VERSION"))
-    dataset_version = models.CharField(max_length=100, blank=True, null=True, default=os.getenv("DATASET_NAME"))
-    cluster_algorithm = models.CharField(max_length=100, blank=True, null=True, default=os.getenv("ALGORITHM"))
+    strategy_version = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        default=os.getenv("STRATEGY_VERSION")
+    )
+    dataset_version = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        default=os.getenv("DATASET_NAME")
+    )
+    cluster_algorithm = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        default=os.getenv("ALGORITHM")
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -132,5 +163,6 @@ class RecommendationEvaluation(models.Model):
     def __str__(self):
         return (
             f"Batch {self.batch_id} | {self.user.username} | "
-            f"{self.list_type} #{self.order_in_list} | nota={self.rating}"
+            f"{self.list_type} #{self.order_in_list} | nota={self.rating} | "
+            f"impacto_lingua={self.language_influenced_rating}"
         )

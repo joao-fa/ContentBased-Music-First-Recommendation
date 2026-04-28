@@ -1,6 +1,10 @@
 .env
 db.sqlite3
 api/data/clusters_management/
+api/data/datasets/normalized_datasets/
+api/data/datasets/original_datasets/
+api/data/datasets/final_datasets/duplicates_discarded/
+api/data/datasets/final_datasets/_dedup_index.sqlite
 
 **/__pycache__/
 *.py[cod]

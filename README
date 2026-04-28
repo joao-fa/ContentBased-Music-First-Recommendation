@@ -1,11 +1,62 @@
 [BACKEND] ----------------------- SETUP LOCAL ----------------------- 
 
 WINDOWS
+
 python -m venv env
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 .\env\Scripts\activate
+
 cd .\backend\
 pip install -r .\requirements.txt
+
+
+[BACKEND] ----------------------- CONFIGURAÇÃO LOCAL -----------------------
+
+⚠️ IMPORTANTE
+
+O projeto foi originalmente configurado para uso com PostgreSQL (produção / Render).
+Para rodar localmente, você precisa garantir que está usando o banco correto.
+
+Opções:
+
+1) Usar SQLite (mais simples para desenvolvimento)
+
+- No arquivo `.env` do backend:
+
+ENV=local
+
+- Isso fará o Django usar SQLite automaticamente (db.sqlite3)
+
+
+2) Usar PostgreSQL local
+
+- Configure no `.env`:
+
+ENV=production
+DB_NAME=...
+DB_USER=...
+DB_PASSWORD=...
+DB_HOST=localhost
+DB_PORT=5432
+
+
+⚠️ IMPORTANTE SOBRE BOOTSTRAP
+
+O sistema executa automaticamente o carregamento da base de músicas ao iniciar o servidor.
+
+Se quiser desabilitar (recomendado para desenvolvimento rápido):
+
+No `.env`:
+
+BOOTSTRAP_DB=false
+
+Caso contrário, o sistema irá:
+
+- carregar ~600k músicas
+- recalcular clusters
+- recalcular estatísticas
+
+(o que pode demorar alguns minutos)
 
 
 [BACKEND] ----------------------- INICIAR BANCO ----------------------- 
@@ -22,11 +73,33 @@ python manage.py runserver
 [FRONTEND] ---------------------- SETUP INICIAL ----------------------- 
 
 cd .\frontend\
+npm install
 npm install axios react-router-dom jwt-decode
 npm install react-icons
 npm install lucide-react
 
+
+[FRONTEND] ---------------------- CONFIGURAÇÃO -----------------------
+
+⚠️ MUITO IMPORTANTE
+
+Configure corretamente o arquivo `.env` do frontend:
+
+Para rodar LOCAL:
+
+VITE_API_URL=http://localhost:8000
+
+Para rodar com backend do Render:
+
+VITE_API_URL=https://contentbased-music-first-recommendation.onrender.com
+
+
+⚠️ NÃO ESQUEÇA:
+- Reiniciar o Vite após alterar o .env
+
+npm run dev
+
+
 [FRONTEND] ---------------------- INICIAR FRONT ----------------------- 
 
-npm install
 npm run dev

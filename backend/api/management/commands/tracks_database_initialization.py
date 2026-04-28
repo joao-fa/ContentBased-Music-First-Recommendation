@@ -2,6 +2,7 @@ import gc
 import os
 import time
 from io import StringIO
+from pathlib import Path
 
 import pandas as pd
 from django.conf import settings
@@ -10,19 +11,53 @@ from django.db import connection, transaction
 from dotenv import load_dotenv
 
 from app_logger import AppLogger
-from recommender.utils.read_dataset import ReadCSVDataset
 from recommender.models.data_clustering import DataClustering
 from recommender.models.predict_new_track import PredictNewTrack
 from recommender.models.spotify_database_normalizer import SpotifyDatabaseNormalizer
 
 from api.models import Track, ClusterMetadata
 
+TRACK_COLUMNS = [
+    "id", "name", "popularity", "duration_ms", "explicit", "artists",
+    "id_artists", "release_date", "danceability", "energy", "key",
+    "loudness", "mode", "speechiness", "acousticness",
+    "instrumentalness", "liveness", "valence", "tempo", "time_signature",
+]
+
+READ_DTYPES = {
+    "id": "string",
+    "name": "string",
+    "popularity": "Int64",
+    "duration_ms": "Int64",
+    "explicit": "string",
+    "artists": "string",
+    "id_artists": "string",
+    "release_date": "string",
+    "danceability": "float64",
+    "energy": "float64",
+    "key": "Int64",
+    "loudness": "float64",
+    "mode": "Int64",
+    "speechiness": "float64",
+    "acousticness": "float64",
+    "instrumentalness": "float64",
+    "liveness": "float64",
+    "valence": "float64",
+    "tempo": "float64",
+    "time_signature": "Int64",
+}
+
+STRING_COLUMNS = ["id", "name", "explicit", "artists", "id_artists", "release_date"]
+
+
+def sanitize_scalar(value, default=None):
+    if pd.isna(value):
+        return default
+    return value
+
 
 class Command(BaseCommand):
     def handle(self, *args, **options):
-        # ======================================================
-        # 1) INICIALIZAÇÃO DO PROCESSO
-        # ======================================================
         start_time = time.time()
         cluster_time = None
         metadata_time = None
@@ -31,21 +66,23 @@ class Command(BaseCommand):
         logger.info("[INFO] Iniciando sistema...")
 
         load_dotenv()
-        dataset_name = os.getenv("DATASET_NAME")
+        dataset_name = os.getenv("DATASET_NAME", "").strip()
         dataset_retention = int(os.getenv("RETENTION"))
         algorithm = os.getenv("ALGORITHM")
         num_clusters = int(os.getenv("NUM_CLUSTERS"))
         apply_scale = os.getenv("APPLY_SCALE") == "True"
 
+        dataset_label = dataset_name if dataset_name else "final_datasets"
+
         if algorithm == "kmeans":
             model_name = (
                 f"ALG_{algorithm}_RET_{dataset_retention}_"
-                f"CLU_{num_clusters}_DS_{dataset_name.replace('.csv', '')}"
+                f"CLU_{num_clusters}_DS_{dataset_label.replace('.csv', '')}"
             )
         else:
             model_name = (
                 f"ALG_{algorithm}_RET_{dataset_retention}_"
-                f"DS_{dataset_name.replace('.csv', '')}"
+                f"DS_{dataset_label.replace('.csv', '')}"
             )
 
         model_path = os.path.join(
@@ -54,19 +91,45 @@ class Command(BaseCommand):
 
         logger.info("[INFO] Iniciando carregamento e normalização do dataset...")
 
-        # ======================================================
-        # 2) LEITURA DO DATASET BRUTO
-        # ======================================================
-        dataset_reader = ReadCSVDataset(dataset_name)
-        dataframe = dataset_reader.execute()
+        dataset_dir = Path(settings.BASE_DIR) / "api" / "data" / "datasets" / "final_datasets"
+        if dataset_name:
+            dataset_names = [name.strip() for name in dataset_name.split(",") if name.strip()]
+            dataset_paths = [dataset_dir / name for name in dataset_names]
+        else:
+            dataset_paths = sorted(dataset_dir.glob("*.csv"))
 
-        if dataframe is None or dataframe.empty:
-            logger.error(f"[ERRO] Dataset '{dataset_name}' não pôde ser carregado.")
+        if not dataset_paths:
+            logger.error(f"[ERRO] Nenhum dataset encontrado em '{dataset_dir}'.")
             return
 
-        # ======================================================
-        # 3) NORMALIZAÇÃO E PREPARAÇÃO DAS FEATURES
-        # ======================================================
+        missing_paths = [str(path) for path in dataset_paths if not path.exists()]
+        if missing_paths:
+            logger.error(f"[ERRO] Os seguintes datasets não foram encontrados: {missing_paths}")
+            return
+
+        dataframes = []
+        for dataset_path in dataset_paths:
+            logger.info(f"[INFO] Lendo dataset: {dataset_path.name}")
+            dataframe_part = pd.read_csv(
+                dataset_path,
+                usecols=lambda col: col in TRACK_COLUMNS,
+                dtype=READ_DTYPES,
+                keep_default_na=True,
+                low_memory=True,
+            )
+            for string_col in STRING_COLUMNS:
+                if string_col in dataframe_part.columns:
+                    dataframe_part[string_col] = dataframe_part[string_col].fillna("")
+            dataframes.append(dataframe_part)
+
+        dataframe = pd.concat(dataframes, ignore_index=True, copy=False)
+        del dataframes
+        gc.collect()
+
+        if dataframe is None or dataframe.empty:
+            logger.error("[ERRO] Os datasets finais não puderam ser carregados.")
+            return
+
         normalizer = SpotifyDatabaseNormalizer(dataframe)
         normalized_dataframe = normalizer.execute(apply_scale, dataset_retention)
 
@@ -74,9 +137,6 @@ class Command(BaseCommand):
         del dataframe
         gc.collect()
 
-        # ======================================================
-        # 4) CLUSTERIZAÇÃO (SE NECESSÁRIO)
-        # ======================================================
         if os.path.exists(model_path):
             logger.info(
                 f"[INFO] Modelo existente encontrado em '{model_path}', pulando clusterização..."
@@ -100,18 +160,14 @@ class Command(BaseCommand):
 
             cluster_end = time.time()
             cluster_time = (cluster_end - cluster_start) / 60.0
-
             logger.info(f"[INFO] Clusterização concluída em {cluster_time:.2f} minutos.")
 
-        # ======================================================
-        # 5) PREDIÇÃO DE CLUSTERS PARA TODAS AS FAIXAS
-        # ======================================================
         logger.info("[INFO] Iniciando predição de clusters para todas as faixas...")
 
         predictor = PredictNewTrack(
             normalized_dataframe,
             model_name,
-            already_scaled=True
+            already_scaled=True,
         )
         predicted_dataframe = predictor.execute()
         predicted_dataframe.reset_index(drop=True, inplace=True)
@@ -119,9 +175,6 @@ class Command(BaseCommand):
         del normalized_dataframe
         gc.collect()
 
-        # ======================================================
-        # 6) MONTAGEM DO DATAFRAME FINAL PARA PERSISTÊNCIA
-        # ======================================================
         final_dataframe = pd.concat(
             [normalizer.metadata_dataframe, predicted_dataframe],
             axis=1,
@@ -134,13 +187,14 @@ class Command(BaseCommand):
                 f"[WARN] Colunas originais ausentes no final_dataframe: {missing}"
             )
 
+        for string_col in STRING_COLUMNS:
+            if string_col in final_dataframe.columns:
+                final_dataframe[string_col] = final_dataframe[string_col].fillna("")
+
         del predicted_dataframe
         del normalizer.metadata_dataframe
         gc.collect()
 
-        # ======================================================
-        # 7) UPSERT DA TABELA TRACK
-        # ======================================================
         logger.info("[INFO] Atualizando tabela 'Track'...")
 
         existing_tables = connection.introspection.table_names()
@@ -174,40 +228,39 @@ class Command(BaseCommand):
 
             to_create = []
             to_update = []
-
-            logger.info("[INFO] Separando registros entre criação e atualização neste chunk...")
-
             chunk_records = chunk_df.to_dict("records")
 
             for row in chunk_records:
-                track_id = row["id"]
-                predicted_cluster = row.get("cluster")
+                track_id = sanitize_scalar(row.get("id"), "")
+                if not track_id:
+                    continue
 
+                predicted_cluster = sanitize_scalar(row.get("cluster"))
                 existing = existing_tracks.get(track_id)
 
                 if existing is None:
                     to_create.append(
                         Track(
-                            id=row["id"],
-                            name=row["name"],
-                            popularity=row.get("popularity", 0),
-                            duration_ms=row.get("duration_ms", 0),
-                            explicit=row.get("explicit", False),
-                            artists=row.get("artists", ""),
-                            id_artists=row.get("id_artists", ""),
-                            release_date=row.get("release_date", ""),
-                            danceability=row.get("danceability"),
-                            energy=row.get("energy"),
-                            key=row.get("key", 0),
-                            loudness=row.get("loudness"),
-                            mode=row.get("mode", 0),
-                            speechiness=row.get("speechiness"),
-                            acousticness=row.get("acousticness"),
-                            instrumentalness=row.get("instrumentalness"),
-                            liveness=row.get("liveness"),
-                            valence=row.get("valence"),
-                            tempo=row.get("tempo"),
-                            time_signature=row.get("time_signature", 4),
+                            id=track_id,
+                            name=sanitize_scalar(row.get("name"), ""),
+                            popularity=sanitize_scalar(row.get("popularity"), 0),
+                            duration_ms=sanitize_scalar(row.get("duration_ms"), 0),
+                            explicit=str(sanitize_scalar(row.get("explicit"), "False")).lower() == "true",
+                            artists=sanitize_scalar(row.get("artists"), ""),
+                            id_artists=sanitize_scalar(row.get("id_artists"), ""),
+                            release_date=sanitize_scalar(row.get("release_date"), ""),
+                            danceability=sanitize_scalar(row.get("danceability")),
+                            energy=sanitize_scalar(row.get("energy")),
+                            key=sanitize_scalar(row.get("key"), 0),
+                            loudness=sanitize_scalar(row.get("loudness")),
+                            mode=sanitize_scalar(row.get("mode"), 0),
+                            speechiness=sanitize_scalar(row.get("speechiness")),
+                            acousticness=sanitize_scalar(row.get("acousticness")),
+                            instrumentalness=sanitize_scalar(row.get("instrumentalness")),
+                            liveness=sanitize_scalar(row.get("liveness")),
+                            valence=sanitize_scalar(row.get("valence")),
+                            tempo=sanitize_scalar(row.get("tempo")),
+                            time_signature=sanitize_scalar(row.get("time_signature"), 4),
                             cluster=predicted_cluster,
                         )
                     )
@@ -216,23 +269,14 @@ class Command(BaseCommand):
                         existing.cluster = predicted_cluster
                         to_update.append(existing)
 
-            logger.info(
-                f"[INFO] Preparação do chunk concluída: {len(to_create)} para criar, {len(to_update)} para atualizar."
-            )
-
             if to_create:
-                logger.info(f"[INFO] Executando bulk_create de {len(to_create)} tracks neste chunk...")
                 Track.objects.bulk_create(to_create, batch_size=1000)
                 total_created += len(to_create)
 
             if to_update:
-                logger.info(f"[INFO] Executando bulk_update de {len(to_update)} tracks neste chunk...")
                 Track.objects.bulk_update(to_update, ["cluster"], batch_size=1000)
                 total_updated += len(to_update)
 
-            logger.info(
-                f"[INFO] Chunk {start}:{end} concluído — criadas={len(to_create)}, atualizadas={len(to_update)}"
-            )
             del chunk_df
             del incoming_ids
             del existing_tracks
@@ -251,11 +295,7 @@ class Command(BaseCommand):
         del normalizer
         gc.collect()
 
-        # ======================================================
-        # 8) CÁLCULO DE MEDIANAS E DESVIO PADRÃO POR CLUSTER
-        # ======================================================
         logger.info("[INFO] Calculando medianas e desvios por cluster...")
-
         metadata_insert_start = time.time()
 
         if connection.vendor == "postgresql":
@@ -265,84 +305,119 @@ class Command(BaseCommand):
                 cursor.execute(
                     f'TRUNCATE TABLE "{ClusterMetadata._meta.db_table}" RESTART IDENTITY CASCADE;'
                 )
-            logger.info("[INFO] Tabela 'ClusterMetadata' truncada com sucesso (Postgres).")
+
+            select_parts = []
+            for col in feature_columns:
+                col_quoted = f'"{col}"'
+                select_parts.append(
+                    f'percentile_cont(0.5) WITHIN GROUP (ORDER BY {col_quoted}) AS median_{col}'
+                )
+                select_parts.append(
+                    f'stddev_samp({col_quoted}) AS std_{col}'
+                )
+
+            select_stats = ",\n               ".join(select_parts)
+            track_table = Track._meta.db_table
+
+            sql = f'''
+                SELECT "cluster",
+                    {select_stats}
+                FROM "{track_table}"
+                GROUP BY "cluster"
+                ORDER BY "cluster";
+            '''
+
+            with connection.cursor() as cursor:
+                cursor.execute('SET LOCAL statement_timeout = 600000;')
+                cursor.execute(sql)
+                colnames = [desc[0] for desc in cursor.description]
+                rows = cursor.fetchall()
+
+            out_rows = []
+            for row in rows:
+                cluster_value = int(row[0])
+                row_map = dict(zip(colnames, row))
+
+                for feature in feature_columns:
+                    median_val = row_map.get(f"median_{feature}")
+                    std_val = row_map.get(f"std_{feature}")
+
+                    median_val = None if median_val is None else float(median_val)
+                    std_val = None if std_val is None else float(std_val)
+
+                    out_rows.append((cluster_value, feature, median_val, std_val))
+
+            table = ClusterMetadata._meta.db_table
+            csv_buf = StringIO()
+
+            for cval, feat, med, std in out_rows:
+                med = "" if med is None else med
+                std = "" if std is None else std
+                csv_buf.write(f"{cval},{feat},{med},{std}\n")
+
+            csv_buf.seek(0)
+
+            with transaction.atomic():
+                with connection.cursor() as cur:
+                    cur.execute('SET LOCAL synchronous_commit = off;')
+                    cur.execute('SET LOCAL statement_timeout = 600000;')
+                    cur.execute('SET LOCAL lock_timeout = 15000;')
+                    copy_sql = (
+                        f'COPY "{table}" ("cluster","feature","median","std_deviation") '
+                        f'FROM STDIN WITH (FORMAT CSV)'
+                    )
+                    cur.copy_expert(copy_sql, csv_buf)
+
         else:
             ClusterMetadata.objects.all().delete()
-            logger.info("[INFO] Tabela 'ClusterMetadata' limpa com sucesso (delete).")
 
-        select_parts = []
-        for col in feature_columns:
-            col_quoted = f'"{col}"'
-            select_parts.append(
-                f'percentile_cont(0.5) WITHIN GROUP (ORDER BY {col_quoted}) AS median_{col}'
-            )
-            select_parts.append(
-                f'stddev_samp({col_quoted}) AS std_{col}'
-            )
-        select_stats = ",\n               ".join(select_parts)
-        track_table = Track._meta.db_table
+            metadata_objects = []
 
-        sql = f'''
-            SELECT "cluster",
-                   {select_stats}
-            FROM "{track_table}"
-            GROUP BY "cluster"
-            ORDER BY "cluster";
-        '''
+            for cluster_value in (
+                Track.objects
+                .exclude(cluster__isnull=True)
+                .values_list("cluster", flat=True)
+                .distinct()
+                .order_by("cluster")
+            ):
+                cluster_qs = Track.objects.filter(cluster=cluster_value)
 
-        with connection.cursor() as cursor:
-            cursor.execute('SET LOCAL statement_timeout = 600000;')
-            cursor.execute(sql)
-            colnames = [desc[0] for desc in cursor.description]
-            rows = cursor.fetchall()
+                for feature in feature_columns:
+                    values = list(
+                        cluster_qs
+                        .exclude(**{f"{feature}__isnull": True})
+                        .values_list(feature, flat=True)
+                    )
 
-        out_rows = []
-        for row in rows:
-            cluster_value = int(row[0])
-            row_map = dict(zip(colnames, row))
-            for feature in feature_columns:
-                median_val = row_map.get(f"median_{feature}")
-                std_val = row_map.get(f"std_{feature}")
+                    if not values:
+                        median_val = None
+                        std_val = None
+                    else:
+                        series = pd.Series(values)
+                        median_val = float(series.median())
+                        std_val = float(series.std()) if len(series) > 1 else None
 
-                median_val = '' if median_val is None else float(median_val)
-                std_val = '' if std_val is None else float(std_val)
+                    metadata_objects.append(
+                        ClusterMetadata(
+                            cluster=cluster_value,
+                            feature=feature,
+                            median=median_val,
+                            std_deviation=std_val,
+                        )
+                    )
 
-                out_rows.append((cluster_value, feature, median_val, std_val))
-
-        table = ClusterMetadata._meta.db_table
-
-        csv_buf = StringIO()
-        for cval, feat, med, std in out_rows:
-            csv_buf.write(f'{cval},{feat},{med},{std}\n')
-        csv_buf.seek(0)
-
-        with transaction.atomic():
-            with connection.cursor() as cur:
-                cur.execute('SET LOCAL synchronous_commit = off;')
-                cur.execute('SET LOCAL statement_timeout = 600000;')
-                cur.execute('SET LOCAL lock_timeout = 15000;')
-
-                copy_sql = f'COPY "{table}" ("cluster","feature","median","std_deviation") FROM STDIN WITH (FORMAT CSV)'
-                cur.copy_expert(copy_sql, csv_buf)
-
+            ClusterMetadata.objects.bulk_create(metadata_objects, batch_size=1000)
         metadata_insert_end = time.time()
         metadata_time = (metadata_insert_end - metadata_insert_start) / 60.0
 
-        logger.info(f"[INFO] Metadados calculados e inseridos em {metadata_time:.2f} minutos.")
-
-        # ======================================================
-        # 9) RESUMO FINAL DE EXECUÇÃO
-        # ======================================================
         end_time = time.time()
         total_minutes = (end_time - start_time) / 60.0
 
         logger.info("========== RESUMO DE TEMPO ==========")
         logger.info(f"[INFO] Tempo total do pipeline: {total_minutes:.2f} minutos.")
-
         if cluster_time is not None:
             logger.info(f"[INFO] Tempo de clusterização: {cluster_time:.2f} minutos.")
         else:
             logger.info("[INFO] Tempo de clusterização: pulado (modelo já existia).")
-
         logger.info(f"[INFO] Tempo de cálculo de metadados: {metadata_time:.2f} minutos.")
         logger.info("=====================================")

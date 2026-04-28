@@ -68,7 +68,7 @@ class CreateUserView(generics.CreateAPIView):
 
 class DefaultPagination(PageNumberPagination):
     page_size = 100
-    page_size_query_param = 'page_size'
+    page_size_query_param = "page_size"
     max_page_size = 1000
 
 
@@ -89,24 +89,24 @@ class ArtistListView(generics.ListAPIView):
         return Track.objects.all()
 
     def list(self, request, *args, **kwargs):
-        raw_values = Track.objects.values_list('artists', flat=True)
+        raw_values = Track.objects.values_list("artists", flat=True)
 
         unique = set()
         for entry in raw_values:
             if not entry:
                 continue
-            cleaned = entry.strip().strip("[]").replace("'", "").replace('"', '')
+            cleaned = entry.strip().strip("[]").replace("'", "").replace('"', "")
             for name in cleaned.split(","):
                 name = name.strip()
                 if name:
                     unique.add(name)
 
-        q = request.query_params.get('q')
+        q = request.query_params.get("q")
         if q:
             q_lower = q.lower()
             unique = {a for a in unique if q_lower in a.lower()}
 
-        data = [{'name': a} for a in sorted(unique)]
+        data = [{"name": a} for a in sorted(unique)]
         page = self.paginate_queryset(data)
         if page is not None:
             serializer = self.get_serializer(page, many=True)
@@ -158,7 +158,7 @@ class TracksByNameView(generics.ListAPIView):
     pagination_class = DefaultPagination
 
     def get_queryset(self):
-        query = self.request.query_params.get('q', '').strip()
+        query = self.request.query_params.get("q", "").strip()
 
         if query:
             return Track.objects.filter(name__icontains=query).order_by("name")
@@ -353,6 +353,7 @@ class RecommendationEvaluationSubmitView(generics.GenericAPIView):
                     order_in_list=item["order_in_list"],
                     list_type=list_type,
                     rating=item["rating"],
+                    language_influenced_rating=item.get("language_influenced_rating") is True,
                     base_metric=base_metric,
                     recommendation_cluster=item.get("recommendation_cluster", recommended_track.cluster),
                     recommended_track_name=recommended_track_name,
