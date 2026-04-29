@@ -65,6 +65,13 @@ class Command(BaseCommand):
 
         logger.info("[INFO] Iniciando sistema...")
 
+        if connection.vendor != "postgresql":
+            logger.error(
+                "[ERRO] Este comando agora assume PostgreSQL, igual ao ambiente Render. "
+                f"Banco atual detectado: {connection.vendor}."
+            )
+            return
+
         load_dotenv()
         dataset_name = os.getenv("DATASET_NAME", "").strip()
         dataset_retention = int(os.getenv("RETENTION"))
@@ -285,8 +292,6 @@ class Command(BaseCommand):
             del chunk_records
             gc.collect()
 
-        transaction.set_autocommit(True)
-
         logger.info(
             f"[INFO] Upsert concluído: {total_created} criadas, {total_updated} clusters atualizados."
         )
@@ -298,115 +303,75 @@ class Command(BaseCommand):
         logger.info("[INFO] Calculando medianas e desvios por cluster...")
         metadata_insert_start = time.time()
 
-        if connection.vendor == "postgresql":
-            with connection.cursor() as cursor:
-                cursor.execute('SET LOCAL statement_timeout = 600000;')
-                cursor.execute('SET LOCAL lock_timeout = 15000;')
-                cursor.execute(
-                    f'TRUNCATE TABLE "{ClusterMetadata._meta.db_table}" RESTART IDENTITY CASCADE;'
+        with connection.cursor() as cursor:
+            cursor.execute('SET statement_timeout = 600000;')
+            cursor.execute('SET lock_timeout = 15000;')
+            cursor.execute(
+                f'TRUNCATE TABLE "{ClusterMetadata._meta.db_table}" RESTART IDENTITY CASCADE;'
+            )
+
+        select_parts = []
+        for col in feature_columns:
+            col_quoted = f'"{col}"'
+            select_parts.append(
+                f'percentile_cont(0.5) WITHIN GROUP (ORDER BY {col_quoted}) AS median_{col}'
+            )
+            select_parts.append(
+                f'stddev_samp({col_quoted}) AS std_{col}'
+            )
+
+        select_stats = ",\n               ".join(select_parts)
+        track_table = Track._meta.db_table
+
+        sql = f'''
+            SELECT "cluster",
+                {select_stats}
+            FROM "{track_table}"
+            GROUP BY "cluster"
+            ORDER BY "cluster";
+        '''
+
+        with connection.cursor() as cursor:
+            cursor.execute('SET statement_timeout = 600000;')
+            cursor.execute(sql)
+            colnames = [desc[0] for desc in cursor.description]
+            rows = cursor.fetchall()
+
+        out_rows = []
+        for row in rows:
+            cluster_value = int(row[0])
+            row_map = dict(zip(colnames, row))
+
+            for feature in feature_columns:
+                median_val = row_map.get(f"median_{feature}")
+                std_val = row_map.get(f"std_{feature}")
+
+                median_val = None if median_val is None else float(median_val)
+                std_val = None if std_val is None else float(std_val)
+
+                out_rows.append((cluster_value, feature, median_val, std_val))
+
+        table = ClusterMetadata._meta.db_table
+        csv_buf = StringIO()
+
+        for cval, feat, med, std in out_rows:
+            med = "" if med is None else med
+            std = "" if std is None else std
+            csv_buf.write(f"{cval},{feat},{med},{std}\n")
+
+        csv_buf.seek(0)
+
+        with transaction.atomic():
+            with connection.cursor() as cur:
+                cur.execute('SET LOCAL synchronous_commit = off;')
+                cur.execute('SET LOCAL statement_timeout = 600000;')
+                cur.execute('SET LOCAL lock_timeout = 15000;')
+                copy_sql = (
+                    f'COPY "{table}" ("cluster","feature","median","std_deviation") '
+                    f'FROM STDIN WITH (FORMAT CSV)'
                 )
+                cur.copy_expert(copy_sql, csv_buf)
 
-            select_parts = []
-            for col in feature_columns:
-                col_quoted = f'"{col}"'
-                select_parts.append(
-                    f'percentile_cont(0.5) WITHIN GROUP (ORDER BY {col_quoted}) AS median_{col}'
-                )
-                select_parts.append(
-                    f'stddev_samp({col_quoted}) AS std_{col}'
-                )
-
-            select_stats = ",\n               ".join(select_parts)
-            track_table = Track._meta.db_table
-
-            sql = f'''
-                SELECT "cluster",
-                    {select_stats}
-                FROM "{track_table}"
-                GROUP BY "cluster"
-                ORDER BY "cluster";
-            '''
-
-            with connection.cursor() as cursor:
-                cursor.execute('SET LOCAL statement_timeout = 600000;')
-                cursor.execute(sql)
-                colnames = [desc[0] for desc in cursor.description]
-                rows = cursor.fetchall()
-
-            out_rows = []
-            for row in rows:
-                cluster_value = int(row[0])
-                row_map = dict(zip(colnames, row))
-
-                for feature in feature_columns:
-                    median_val = row_map.get(f"median_{feature}")
-                    std_val = row_map.get(f"std_{feature}")
-
-                    median_val = None if median_val is None else float(median_val)
-                    std_val = None if std_val is None else float(std_val)
-
-                    out_rows.append((cluster_value, feature, median_val, std_val))
-
-            table = ClusterMetadata._meta.db_table
-            csv_buf = StringIO()
-
-            for cval, feat, med, std in out_rows:
-                med = "" if med is None else med
-                std = "" if std is None else std
-                csv_buf.write(f"{cval},{feat},{med},{std}\n")
-
-            csv_buf.seek(0)
-
-            with transaction.atomic():
-                with connection.cursor() as cur:
-                    cur.execute('SET LOCAL synchronous_commit = off;')
-                    cur.execute('SET LOCAL statement_timeout = 600000;')
-                    cur.execute('SET LOCAL lock_timeout = 15000;')
-                    copy_sql = (
-                        f'COPY "{table}" ("cluster","feature","median","std_deviation") '
-                        f'FROM STDIN WITH (FORMAT CSV)'
-                    )
-                    cur.copy_expert(copy_sql, csv_buf)
-
-        else:
-            ClusterMetadata.objects.all().delete()
-
-            metadata_objects = []
-
-            for cluster_value in (
-                Track.objects
-                .exclude(cluster__isnull=True)
-                .values_list("cluster", flat=True)
-                .distinct()
-                .order_by("cluster")
-            ):
-                cluster_qs = Track.objects.filter(cluster=cluster_value)
-
-                for feature in feature_columns:
-                    values = list(
-                        cluster_qs
-                        .exclude(**{f"{feature}__isnull": True})
-                        .values_list(feature, flat=True)
-                    )
-
-                    if not values:
-                        median_val = None
-                        std_val = None
-                    else:
-                        series = pd.Series(values)
-                        median_val = float(series.median())
-                        std_val = float(series.std()) if len(series) > 1 else None
-
-                    metadata_objects.append(
-                        ClusterMetadata(
-                            cluster=cluster_value,
-                            feature=feature,
-                            median=median_val,
-                            std_deviation=std_val,
-                        )
-                    )
-
-            ClusterMetadata.objects.bulk_create(metadata_objects, batch_size=1000)
         metadata_insert_end = time.time()
         metadata_time = (metadata_insert_end - metadata_insert_start) / 60.0
 

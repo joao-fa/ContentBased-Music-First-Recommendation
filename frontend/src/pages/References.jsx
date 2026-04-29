@@ -281,6 +281,10 @@ export default function References() {
                 do trabalho.
               </li>
               <li>
+                Os dados de usuário coletados serão utilizados exclusivamente para a 
+                identificação e associação das avaliações realizadas no sistema, sendo descartados ao término do projeto.
+              </li>
+              <li>
                 Em caso de dúvidas, interesse acadêmico ou solicitação de
                 informações adicionais, entre em contato pelos canais listados
                 nesta página.

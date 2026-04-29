@@ -332,7 +332,7 @@ export default function Recommender() {
         <h1 className="recommender-title">Nova Recomendação</h1>
 
         <p className="recommender-description">
-          Escolha o tipo de pesquisa, selecione uma música e use-a como base para recomendações.
+          Escolha um tipo de pesquisa abaixo e então selecione uma música de sua preferência.
         </p>
 
         {/* Tipo de busca */}
@@ -398,13 +398,13 @@ export default function Recommender() {
 
             <div className="recommender-selection">
               <p>
-                Track selecionada:{" "}
+                Música selecionada:{" "}
                 {selectedTrack ? (
                   <strong>
                     {selectedTrack.name} — {selectedTrack.artists}
                   </strong>
                 ) : (
-                  <span>Nenhuma track selecionada.</span>
+                  <span>Nenhuma música selecionada.</span>
                 )}
               </p>
 
@@ -495,6 +495,9 @@ export default function Recommender() {
                 <h2 className="recommender-subtitle">
                   2. Busque uma música de {selectedArtist.name}
                 </h2>
+                <h5 className="recommender-subtitle">
+                  Clique em filtrar com a caixa vazia para exibir todas as faixas do seu artista.
+                </h5>
 
                 <form className="recommender-form" onSubmit={handleArtistTrackSearch}>
                   <input
@@ -538,13 +541,13 @@ export default function Recommender() {
 
                 <div className="recommender-selection">
                   <p>
-                    Track selecionada:{" "}
+                    Música selecionada:{" "}
                     {artistSelectedTrack ? (
                       <strong>
                         {artistSelectedTrack.name} — {artistSelectedTrack.artists}
                       </strong>
                     ) : (
-                      <span>Nenhuma track selecionada.</span>
+                      <span>Nenhuma música selecionada.</span>
                     )}
                   </p>
 

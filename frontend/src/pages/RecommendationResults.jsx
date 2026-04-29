@@ -1,7 +1,7 @@
-import { Play } from "lucide-react";
+import { HelpCircle, Play } from "lucide-react";
 import { FaSpotify } from "react-icons/fa";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import "../styles/Home.css";
 import "../styles/Recommender.css";
 import api from "../api";
@@ -13,58 +13,146 @@ export default function RecommendationResults() {
 
   const data = location.state;
 
-  const { selected_track, random_list, variable_based_list, used_feature } = data || {};
+  const {
+    selected_track,
+    random_list,
+    variable_based_list,
+    used_feature,
+    reference_feature_value,
+    cluster,
+  } = data || {};
+
+  const createSessionUuid = () => {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (char) => {
+      const random = (Math.random() * 16) | 0;
+      const value = char === "x" ? random : (random & 0x3) | 0x8;
+      return value.toString(16);
+    });
+  };
+
+  const sessionUuidRef = useRef(createSessionUuid());
+  const clientStartedAtRef = useRef(new Date().toISOString());
 
   const toArray = (x) => (Array.isArray(x) ? x : []);
-  const listRandom = toArray(random_list).slice(0, 3);
-  const listVariableBased = toArray(variable_based_list).slice(0, 3);
+
+  const frozenListsRef = useRef(null);
+
+  if (data && frozenListsRef.current === null) {
+    const initialRandomList = toArray(random_list).slice(0, 3);
+    const initialVariableBasedList = toArray(variable_based_list).slice(0, 3);
+    const shouldShowRandomFirst = Math.random() < 0.5;
+
+    const randomListConfig = {
+      displayLabel: shouldShowRandomFirst ? "Lista 1" : "Lista 2",
+      listType: "listRandom",
+      tracks: initialRandomList,
+    };
+
+    const variableBasedListConfig = {
+      displayLabel: shouldShowRandomFirst ? "Lista 2" : "Lista 1",
+      listType: "listVariableBased",
+      tracks: initialVariableBasedList,
+    };
+
+    const displayedLists = shouldShowRandomFirst
+      ? [randomListConfig, variableBasedListConfig]
+      : [variableBasedListConfig, randomListConfig];
+
+    const displayOrderConfig = displayedLists.reduce((acc, listConfig) => {
+      acc[listConfig.displayLabel] = listConfig.listType;
+      return acc;
+    }, {});
+
+    frozenListsRef.current = {
+      listRandom: initialRandomList,
+      listVariableBased: initialVariableBasedList,
+      displayedLists,
+      displayOrderConfig,
+    };
+  }
+
+  const listRandom = frozenListsRef.current?.listRandom ?? [];
+  const listVariableBased = frozenListsRef.current?.listVariableBased ?? [];
+  const displayedLists = frozenListsRef.current?.displayedLists ?? [];
+  const displayOrderConfig = frozenListsRef.current?.displayOrderConfig ?? {};
 
   const [ratings, setRatings] = useState({});
   const [errorMsg, setErrorMsg] = useState("");
-  const [openEmbedTrackId, setOpenEmbedTrackId] = useState(null);
+  const [openEmbedTrackKey, setOpenEmbedTrackKey] = useState(null);
+
+  const [previewOpenedTracks, setPreviewOpenedTracks] = useState({});
+  const [spotifyOpenedTracks, setSpotifyOpenedTracks] = useState({});
 
   const [showLanguageQuestion, setShowLanguageQuestion] = useState(false);
   const [languageHadImpact, setLanguageHadImpact] = useState(null);
   const [languageImpactedTracks, setLanguageImpactedTracks] = useState({});
+
+  const [evaluationSubmitted, setEvaluationSubmitted] = useState(false);
 
   const ratingOptions = useMemo(() => {
     return ["", ...Array.from({ length: 11 }, (_, i) => String(i))];
   }, []);
 
   const allDisplayedTracks = useMemo(() => {
-    const safe = (t, idx, listType) => (t ? { t, idx, listType } : null);
+    return displayedLists.flatMap((listConfig) =>
+      listConfig.tracks
+        .map((track, index) =>
+          track
+            ? {
+                t: track,
+                idx: index,
+                listType: listConfig.listType,
+              }
+            : null
+        )
+        .filter(Boolean)
+    );
+  }, [displayedLists]);
 
-    return [
-      ...listRandom.map((t, idx) => safe(t, idx, "listRandom")).filter(Boolean),
-      ...listVariableBased.map((t, idx) =>
-        safe(t, idx, "listVariableBased")
-      ).filter(Boolean),
-    ];
-  }, [listRandom, listVariableBased]);
+  const getTrackKey = (track, index, listType = "") => {
+    if (track?.id) {
+      return `${listType}-${track.id}`;
+    }
 
-  const getTrackId = (track, index, listType = "") =>
-    track?.id ? `${listType}-${track.id}` : `${listType}-${track?.name}-${index}`;
+    return `${listType}-${track?.name || "track"}-${index}`;
+  };
+
+  const getFeatureValue = (track, feature) => {
+    if (!track || !feature) return null;
+
+    const value = track[feature];
+
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+
+    return null;
+  };
 
   const handleLogout = () => {
     localStorage.clear();
     navigate("/login");
   };
 
-  const setRating = (trackId, value) => {
-    setRatings((prev) => ({ ...prev, [trackId]: value }));
+  const setRating = (trackKey, value) => {
+    setRatings((prev) => ({ ...prev, [trackKey]: value }));
   };
 
-  const toggleLanguageImpactTrack = (trackId) => {
+  const toggleLanguageImpactTrack = (trackKey) => {
     setLanguageImpactedTracks((prev) => ({
       ...prev,
-      [trackId]: !prev[trackId],
+      [trackKey]: !prev[trackKey],
     }));
   };
 
   const validateRatings = () => {
     for (const item of allDisplayedTracks) {
-      const trackId = getTrackId(item.t, item.idx, item.listType);
-      const value = ratings[trackId];
+      const trackKey = getTrackKey(item.t, item.idx, item.listType);
+      const value = ratings[trackKey];
 
       if (value === undefined || value === "") {
         setErrorMsg("Preencha todas as notas (0 a 10) antes de prosseguir.");
@@ -99,7 +187,27 @@ export default function RecommendationResults() {
     }
 
     try {
+      const clientSubmittedAt = new Date();
+      const clientStartedAt = new Date(clientStartedAtRef.current);
+      const durationSeconds = Math.max(
+        0,
+        Math.round((clientSubmittedAt.getTime() - clientStartedAt.getTime()) / 1000)
+      );
+
       const payload = {
+        session_uuid: sessionUuidRef.current,
+        client_started_at: clientStartedAtRef.current,
+        client_submitted_at: clientSubmittedAt.toISOString(),
+        duration_seconds: durationSeconds,
+        experiment_config: {
+          used_feature: used_feature ?? null,
+          reference_feature_value: reference_feature_value ?? null,
+          cluster: cluster ?? selected_track?.cluster ?? null,
+          random_list_size: listRandom.length,
+          variable_based_list_size: listVariableBased.length,
+          display_order: displayOrderConfig,
+        },
+
         base_track_id: selected_track?.id,
         used_feature: used_feature ?? null,
 
@@ -109,36 +217,45 @@ export default function RecommendationResults() {
 
         items: [
           ...listRandom.map((track, index) => {
-            const trackId = getTrackId(track, index, "listRandom");
+            const trackKey = getTrackKey(track, index, "listRandom");
 
             return {
               track_id: track.id,
               order_in_list: index + 1,
               list_type: "listRandom",
-              rating: Number(ratings[trackId]),
+              rating: Number(ratings[trackKey]),
               language_influenced_rating:
                 languageHadImpact === true &&
-                Boolean(languageImpactedTracks[trackId]),
+                Boolean(languageImpactedTracks[trackKey]),
               base_metric: null,
               recommendation_cluster: track.cluster ?? null,
+              base_track_feature_value: null,
+              recommended_track_feature_value: null,
+              was_preview_opened: Boolean(previewOpenedTracks[trackKey]),
+              spotify_opened: Boolean(spotifyOpenedTracks[trackKey]),
               recommended_track_name: track.name ?? "",
               recommended_track_artists: track.artists ?? "",
             };
           }),
 
           ...listVariableBased.map((track, index) => {
-            const trackId = getTrackId(track, index, "listVariableBased");
+            const trackKey = getTrackKey(track, index, "listVariableBased");
 
             return {
               track_id: track.id,
               order_in_list: index + 1,
               list_type: "listVariableBased",
-              rating: Number(ratings[trackId]),
+              rating: Number(ratings[trackKey]),
               language_influenced_rating:
                 languageHadImpact === true &&
-                Boolean(languageImpactedTracks[trackId]),
+                Boolean(languageImpactedTracks[trackKey]),
               base_metric: used_feature ?? null,
               recommendation_cluster: track.cluster ?? null,
+              base_track_feature_value:
+                reference_feature_value ?? getFeatureValue(selected_track, used_feature),
+              recommended_track_feature_value: getFeatureValue(track, used_feature),
+              was_preview_opened: Boolean(previewOpenedTracks[trackKey]),
+              spotify_opened: Boolean(spotifyOpenedTracks[trackKey]),
               recommended_track_name: track.name ?? "",
               recommended_track_artists: track.artists ?? "",
             };
@@ -151,7 +268,9 @@ export default function RecommendationResults() {
       console.log("Avaliações salvas:", response.data);
 
       localStorage.removeItem("EVALUATION_DATA");
-      navigate("/recommender");
+      setEvaluationSubmitted(true);
+      setOpenEmbedTrackKey(null);
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err) {
       console.error("Erro completo:", err);
       console.error("Status:", err.response?.status);
@@ -173,20 +292,32 @@ export default function RecommendationResults() {
   const getSpotifyEmbedUrl = (spotifyId) =>
     `https://open.spotify.com/embed/track/${spotifyId}`;
 
-  const toggleEmbed = (spotifyId) => {
-    setOpenEmbedTrackId((prev) => (prev === spotifyId ? null : spotifyId));
+  const markSpotifyOpened = (trackKey) => {
+    setSpotifyOpenedTracks((prev) => ({
+      ...prev,
+      [trackKey]: true,
+    }));
+  };
+
+  const toggleEmbed = (trackKey) => {
+    setPreviewOpenedTracks((prev) => ({
+      ...prev,
+      [trackKey]: true,
+    }));
+
+    setOpenEmbedTrackKey((prev) => (prev === trackKey ? null : trackKey));
   };
 
   const renderTrackItem = (track, index, listType) => {
     if (!track) return null;
 
-    const trackId = getTrackId(track, index, listType);
-    const ratingValue = ratings[trackId] ?? "";
+    const trackKey = getTrackKey(track, index, listType);
+    const ratingValue = ratings[trackKey] ?? "";
     const spotifyId = track?.id;
-    const isEmbedOpen = openEmbedTrackId === spotifyId;
+    const isEmbedOpen = openEmbedTrackKey === trackKey;
 
     return (
-      <li key={trackId} className="recommender-result-item rating-item">
+      <li key={trackKey} className="recommender-result-item rating-item">
         <div className="rating-track-info">
           <div
             className="track-label"
@@ -200,7 +331,7 @@ export default function RecommendationResults() {
           <select
             className="rating-input"
             value={ratingValue}
-            onChange={(e) => setRating(trackId, e.target.value)}
+            onChange={(e) => setRating(trackKey, e.target.value)}
             disabled={showLanguageQuestion}
           >
             <option value="" disabled>
@@ -221,6 +352,7 @@ export default function RecommendationResults() {
             target="_blank"
             rel="noreferrer"
             title="Abrir no Spotify"
+            onClick={() => markSpotifyOpened(trackKey)}
           >
             <FaSpotify size={16} />
           </a>
@@ -228,7 +360,7 @@ export default function RecommendationResults() {
           <button
             type="button"
             className="spotify-icon-btn"
-            onClick={() => toggleEmbed(spotifyId)}
+            onClick={() => toggleEmbed(trackKey)}
             title="Ouvir aqui"
           >
             <Play size={16} />
@@ -239,8 +371,8 @@ export default function RecommendationResults() {
           <label className="language-impact-checkbox">
             <input
               type="checkbox"
-              checked={Boolean(languageImpactedTracks[trackId])}
-              onChange={() => toggleLanguageImpactTrack(trackId)}
+              checked={Boolean(languageImpactedTracks[trackKey])}
+              onChange={() => toggleLanguageImpactTrack(trackKey)}
             />
             A língua desta música influenciou minha avaliação
           </label>
@@ -263,6 +395,75 @@ export default function RecommendationResults() {
       </li>
     );
   };
+
+  if (evaluationSubmitted) {
+    return (
+      <div className="home-wrapper">
+        <header className="home-header">
+          <div className="header-left">
+            <h2
+              className="site-title"
+              onClick={() => navigate("/")}
+              style={{ cursor: "pointer" }}
+            >
+              CB Music First Recommendation
+            </h2>
+          </div>
+
+          <div className="header-right">
+            <span className="welcome-text">Olá, {username}</span>
+            <button className="logout-button" onClick={handleLogout}>
+              Sair
+            </button>
+          </div>
+        </header>
+
+        <main className="form-container recommender-container">
+          <h1 className="recommender-title">Avaliação concluída</h1>
+
+          <p className="recommender-subtitle" style={{ marginTop: "0.75rem" }}>
+            Obrigado por submeter sua avaliação. Sua participação contribui para a análise
+            da proposta de recomendação musical deste projeto acadêmico.
+          </p>
+
+          <div className="recommender-actions">
+            <button
+              className="form-button home-button recommender-back-button"
+              onClick={() => navigate("/")}
+            >
+              Voltar para a tela inicial
+            </button>
+
+            <button
+              className="form-button home-button recommender-submit-button"
+              onClick={() => navigate("/recommender")}
+            >
+              Iniciar nova recomendação
+            </button>
+          </div>
+        </main>
+
+        <footer className="home-footer">
+          <div className="footer-content">
+            <p className="footer-text">
+              Projeto acadêmico desenvolvido para pesquisa em sistemas de recomendação musical baseados em conteúdo. Consulte as referências na aba 'Referências'.
+            </p>
+            <p className="footer-info">
+              © {new Date().getFullYear()} João Víctor Ferreira Araujo — Universidade de São Paulo (EACH-USP)
+            </p>
+            <a
+              className="footer-link"
+              href="https://github.com/joao-fa/ContentBased-Music-First-Recommendation"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Ver projeto no GitHub
+            </a>
+          </div>
+        </footer>
+      </div>
+    );
+  }
 
   if (!data) {
     return (
@@ -342,6 +543,68 @@ export default function RecommendationResults() {
           <strong>{selected_track?.name || "a música selecionada"}</strong>
         </p>
 
+        <div
+          className="recommender-subtitle"
+          style={{
+            marginTop: "0.75rem",
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+            position: "relative",
+            width: "fit-content",
+          }}
+        >
+          <strong>Dúvidas sobre como avaliar? </strong>
+
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              cursor: "help",
+              position: "relative",
+            }}
+            className="evaluation-help-tooltip-wrapper"
+          >
+            <HelpCircle size={17} />
+
+            <span
+              className="evaluation-help-tooltip"
+              style={{
+                position: "absolute",
+                left: "24px",
+                top: "50%",
+                transform: "translateY(-50%)",
+                width: "260px",
+                padding: "10px 12px",
+                borderRadius: "8px",
+                background: "#111827",
+                color: "#ffffff",
+                fontSize: "12px",
+                lineHeight: "1.4",
+                fontWeight: 400,
+                opacity: 0,
+                visibility: "hidden",
+                transition: "opacity 0.15s ease-in-out",
+                zIndex: 20,
+                boxShadow: "0 6px 18px rgba(0, 0, 0, 0.22)",
+              }}
+            >
+              Avalie de forma simples: notas maiores indicam que você gostou mais da
+              música recomendada. Use notas menores quando a música não combinar com
+              sua preferência.
+            </span>
+          </span>
+        </div>
+
+        <style>
+          {`
+            .evaluation-help-tooltip-wrapper:hover .evaluation-help-tooltip {
+              opacity: 1 !important;
+              visibility: visible !important;
+            }
+          `}
+        </style>
+
         {errorMsg && (
           <div
             style={{
@@ -357,21 +620,17 @@ export default function RecommendationResults() {
         )}
 
         <div className="recommender-lists-grid">
-          <section className="recommender-section">
-            <h2 className="recommender-subtitle">Lista 1</h2>
-            <ul className="recommender-results-list">
-              {listRandom.map((t, i) => renderTrackItem(t, i, "listRandom"))}
-            </ul>
-          </section>
+          {displayedLists.map((listConfig) => (
+            <section className="recommender-section" key={listConfig.displayLabel}>
+              <h2 className="recommender-subtitle">{listConfig.displayLabel}</h2>
 
-          <section className="recommender-section">
-            <h2 className="recommender-subtitle">Lista 2</h2>
-            <ul className="recommender-results-list">
-              {listVariableBased.map((t, i) =>
-                renderTrackItem(t, i, "listVariableBased")
-              )}
-            </ul>
-          </section>
+              <ul className="recommender-results-list">
+                {listConfig.tracks.map((track, index) =>
+                  renderTrackItem(track, index, listConfig.listType)
+                )}
+              </ul>
+            </section>
+          ))}
         </div>
 
         {showLanguageQuestion && (

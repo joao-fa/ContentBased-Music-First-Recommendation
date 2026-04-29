@@ -1,7 +1,9 @@
 import os
+import uuid
 
 from django.db import models
 from django.conf import settings
+
 
 class Track(models.Model):
     id = models.CharField(primary_key=True, max_length=50)
@@ -47,6 +49,16 @@ class RecommendationBatch(models.Model):
     Gera um ID sequencial por submissão de recomendação.
     Cada submissão cria 1 batch, e várias linhas de avaliação apontam para ele.
     """
+    
+    session_uuid = models.UUIDField(
+        default=uuid.uuid4,
+        editable=False,
+        db_index=True,
+        null=True,
+        blank=True,
+        help_text="Identificador público/analítico da sessão de avaliação.",
+    )
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -64,18 +76,21 @@ class RecommendationBatch(models.Model):
     recommendation_cluster = models.IntegerField(null=True, blank=True)
 
     used_feature = models.CharField(max_length=100, null=True, blank=True)
+
     strategy_version = models.CharField(
         max_length=50,
         blank=True,
         null=True,
         default=os.getenv("STRATEGY_VERSION")
     )
+
     dataset_version = models.CharField(
         max_length=100,
         blank=True,
         null=True,
         default=os.getenv("DATASET_NAME")
     )
+
     cluster_algorithm = models.CharField(
         max_length=100,
         blank=True,
@@ -83,10 +98,16 @@ class RecommendationBatch(models.Model):
         default=os.getenv("ALGORITHM")
     )
 
+    client_started_at = models.DateTimeField(null=True, blank=True)
+    client_submitted_at = models.DateTimeField(null=True, blank=True)
+    duration_seconds = models.PositiveIntegerField(null=True, blank=True)
+    experiment_config = models.JSONField(null=True, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"Batch {self.id} - {self.user.username} - {self.base_track_id}"
+
 
 class RecommendationEvaluation(models.Model):
     LIST_TYPE_CHOICES = (
@@ -127,6 +148,14 @@ class RecommendationEvaluation(models.Model):
     base_metric = models.CharField(max_length=100, null=True, blank=True)
     recommendation_cluster = models.IntegerField(null=True, blank=True)
 
+    base_track_cluster_at_recommendation = models.IntegerField(null=True, blank=True)
+    recommended_track_cluster_at_recommendation = models.IntegerField(null=True, blank=True)
+    base_track_feature_value = models.FloatField(null=True, blank=True)
+    recommended_track_feature_value = models.FloatField(null=True, blank=True)
+
+    was_preview_opened = models.BooleanField(default=False)
+    spotify_opened = models.BooleanField(default=False)
+
     recommended_track_name = models.CharField(max_length=255, null=True, blank=True)
     recommended_track_artists = models.TextField(blank=True, default="")
 
@@ -136,12 +165,14 @@ class RecommendationEvaluation(models.Model):
         null=True,
         default=os.getenv("STRATEGY_VERSION")
     )
+
     dataset_version = models.CharField(
         max_length=100,
         blank=True,
         null=True,
         default=os.getenv("DATASET_NAME")
     )
+
     cluster_algorithm = models.CharField(
         max_length=100,
         blank=True,

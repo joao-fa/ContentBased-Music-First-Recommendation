@@ -58,6 +58,12 @@ class RecommendationEvaluationItemSerializer(serializers.Serializer):
     base_metric = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     recommendation_cluster = serializers.IntegerField(required=False, allow_null=True)
 
+    base_track_feature_value = serializers.FloatField(required=False, allow_null=True)
+    recommended_track_feature_value = serializers.FloatField(required=False, allow_null=True)
+
+    was_preview_opened = serializers.BooleanField(required=False, default=False)
+    spotify_opened = serializers.BooleanField(required=False, default=False)
+
     recommended_track_name = serializers.CharField(required=False, allow_blank=True)
     recommended_track_artists = serializers.CharField(required=False, allow_blank=True)
 
@@ -66,16 +72,24 @@ class RecommendationEvaluationSubmitSerializer(serializers.Serializer):
     base_track_id = serializers.CharField()
     used_feature = serializers.CharField(required=False, allow_null=True, allow_blank=True)
 
+    session_uuid = serializers.UUIDField(required=False, allow_null=True)
+    client_started_at = serializers.DateTimeField(required=False, allow_null=True)
+    client_submitted_at = serializers.DateTimeField(required=False, allow_null=True)
+    duration_seconds = serializers.IntegerField(required=False, allow_null=True, min_value=0)
+    experiment_config = serializers.JSONField(required=False, allow_null=True)
+
     strategy_version = serializers.CharField(
         max_length=50,
         allow_blank=True,
         default=os.getenv("STRATEGY_VERSION")
     )
+
     dataset_version = serializers.CharField(
         max_length=100,
         allow_blank=True,
         default=os.getenv("DATASET_NAME")
     )
+
     cluster_algorithm = serializers.CharField(
         max_length=100,
         allow_blank=True,
@@ -125,6 +139,14 @@ class MyRecommendationEvaluationItemSerializer(serializers.ModelSerializer):
             "language_influenced_rating",
             "list_type",
             "order_in_list",
+            "base_metric",
+            "recommendation_cluster",
+            "base_track_cluster_at_recommendation",
+            "recommended_track_cluster_at_recommendation",
+            "base_track_feature_value",
+            "recommended_track_feature_value",
+            "was_preview_opened",
+            "spotify_opened",
             "created_at",
         ]
 
@@ -136,9 +158,16 @@ class MyRecommendationBatchSerializer(serializers.ModelSerializer):
         model = RecommendationBatch
         fields = [
             "id",
+            "session_uuid",
             "base_track",
             "base_track_name",
             "base_track_artists",
+            "recommendation_cluster",
+            "used_feature",
+            "client_started_at",
+            "client_submitted_at",
+            "duration_seconds",
+            "experiment_config",
             "created_at",
             "recommendations",
         ]

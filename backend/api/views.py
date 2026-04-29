@@ -302,6 +302,30 @@ class RecommendationEvaluationSubmitView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = RecommendationEvaluationSubmitSerializer
 
+    def _safe_float(self, value):
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    def _feature_value(self, track, feature):
+        if not feature or feature not in ALLOWED_SIMILARITY_FEATURES:
+            return None
+        return self._safe_float(getattr(track, feature, None))
+
+    def _default_experiment_config(self):
+        return {
+            "strategy_version": os.getenv("STRATEGY_VERSION"),
+            "dataset_name": os.getenv("DATASET_NAME"),
+            "algorithm": os.getenv("ALGORITHM"),
+            "num_clusters": os.getenv("NUM_CLUSTERS"),
+            "retention": os.getenv("RETENTION"),
+            "apply_scale": os.getenv("APPLY_SCALE"),
+            "use_minibatch": os.getenv("USE_MINIBATCH"),
+        }
+
     @transaction.atomic
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
@@ -320,18 +344,28 @@ class RecommendationEvaluationSubmitView(generics.GenericAPIView):
         base_track_name = data.get("base_track_name") or base_track.name
         base_track_artists = data.get("base_track_artists") or base_track.artists
         batch_recommendation_cluster = data.get("recommendation_cluster", base_track.cluster)
+        experiment_config = data.get("experiment_config") or self._default_experiment_config()
 
-        batch = RecommendationBatch.objects.create(
-            user=user,
-            base_track=base_track,
-            base_track_name=base_track_name,
-            base_track_artists=base_track_artists,
-            recommendation_cluster=batch_recommendation_cluster,
-            used_feature=used_feature,
-            strategy_version=strategy_version,
-            dataset_version=dataset_version,
-            cluster_algorithm=cluster_algorithm,
-        )
+        batch_create_kwargs = {
+            "user": user,
+            "base_track": base_track,
+            "base_track_name": base_track_name,
+            "base_track_artists": base_track_artists,
+            "recommendation_cluster": batch_recommendation_cluster,
+            "used_feature": used_feature,
+            "strategy_version": strategy_version,
+            "dataset_version": dataset_version,
+            "cluster_algorithm": cluster_algorithm,
+            "client_started_at": data.get("client_started_at"),
+            "client_submitted_at": data.get("client_submitted_at"),
+            "duration_seconds": data.get("duration_seconds"),
+            "experiment_config": experiment_config,
+        }
+
+        if data.get("session_uuid"):
+            batch_create_kwargs["session_uuid"] = data["session_uuid"]
+
+        batch = RecommendationBatch.objects.create(**batch_create_kwargs)
 
         evaluations = []
 
@@ -343,6 +377,14 @@ class RecommendationEvaluationSubmitView(generics.GenericAPIView):
 
             recommended_track_name = item.get("recommended_track_name") or recommended_track.name
             recommended_track_artists = item.get("recommended_track_artists") or recommended_track.artists
+
+            base_track_feature_value = item.get("base_track_feature_value")
+            if base_track_feature_value is None:
+                base_track_feature_value = self._feature_value(base_track, base_metric)
+
+            recommended_track_feature_value = item.get("recommended_track_feature_value")
+            if recommended_track_feature_value is None:
+                recommended_track_feature_value = self._feature_value(recommended_track, base_metric)
 
             evaluations.append(
                 RecommendationEvaluation(
@@ -356,6 +398,12 @@ class RecommendationEvaluationSubmitView(generics.GenericAPIView):
                     language_influenced_rating=item.get("language_influenced_rating") is True,
                     base_metric=base_metric,
                     recommendation_cluster=item.get("recommendation_cluster", recommended_track.cluster),
+                    base_track_cluster_at_recommendation=base_track.cluster,
+                    recommended_track_cluster_at_recommendation=recommended_track.cluster,
+                    base_track_feature_value=base_track_feature_value,
+                    recommended_track_feature_value=recommended_track_feature_value,
+                    was_preview_opened=item.get("was_preview_opened") is True,
+                    spotify_opened=item.get("spotify_opened") is True,
                     recommended_track_name=recommended_track_name,
                     recommended_track_artists=recommended_track_artists,
                     strategy_version=strategy_version,
@@ -370,6 +418,7 @@ class RecommendationEvaluationSubmitView(generics.GenericAPIView):
             {
                 "message": "Avaliações salvas com sucesso.",
                 "recommendation_id": batch.id,
+                "session_uuid": str(batch.session_uuid),
                 "saved_items": len(evaluations),
             },
             status=status.HTTP_201_CREATED,

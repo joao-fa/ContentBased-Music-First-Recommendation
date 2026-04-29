@@ -95,6 +95,59 @@ body {
   cursor: pointer;
 }
 
+/* Modal de aviso sobre credenciais */
+.auth-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background-color: rgba(0, 0, 0, 0.58);
+}
+
+.auth-modal {
+  width: 100%;
+  max-width: 460px;
+  padding: 28px;
+  border-radius: 14px;
+  background-color: #ffffff;
+  color: #1f1f1f;
+  box-shadow: 0 10px 35px rgba(0, 0, 0, 0.28);
+}
+
+.auth-modal-title {
+  margin: 0 0 14px;
+  font-size: 1.45rem;
+  color: #0d0d0d;
+}
+
+.auth-modal-text {
+  margin: 0 0 12px;
+  font-size: 0.98rem;
+  line-height: 1.5;
+  color: #333333;
+}
+
+.auth-modal-button {
+  width: 100%;
+  margin-top: 10px;
+  padding: 12px;
+  border: none;
+  border-radius: 8px;
+  background-color: #007bff;
+  color: #ffffff;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease-in-out;
+}
+
+.auth-modal-button:hover {
+  background-color: #0056b3;
+}
+
 /* Responsivo */
 @media (max-width: 480px) {
   .auth-container {
@@ -108,5 +161,17 @@ body {
 
   .auth-heading {
     font-size: 1.5rem;
+  }
+
+  .auth-modal {
+    padding: 22px;
+  }
+
+  .auth-modal-title {
+    font-size: 1.25rem;
+  }
+
+  .auth-modal-text {
+    font-size: 0.94rem;
   }
 }
