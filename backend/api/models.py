@@ -49,7 +49,7 @@ class RecommendationBatch(models.Model):
     Gera um ID sequencial por submissão de recomendação.
     Cada submissão cria 1 batch, e várias linhas de avaliação apontam para ele.
     """
-    
+
     session_uuid = models.UUIDField(
         default=uuid.uuid4,
         editable=False,
@@ -111,8 +111,9 @@ class RecommendationBatch(models.Model):
 
 class RecommendationEvaluation(models.Model):
     LIST_TYPE_CHOICES = (
-        ("listRandom", "Lista Aleatória"),
-        ("listVariableBased", "Lista Baseada em Variável"),
+        ("randomList", "Lista Aleatória"),
+        ("greatestVariationList", "Lista por Maior Variação"),
+        ("furthestFromTheMedianList", "Lista por Maior Distância da Mediana"),
     )
 
     batch = models.ForeignKey(

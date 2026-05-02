@@ -268,7 +268,8 @@ export default function Recommender() {
 
   try {
     const response = await api.get(
-      `/api/artists/${encodeURIComponent(artistName)}/tracks/`
+      `/api/artists/${encodeURIComponent(artistName)}/tracks/`,
+      { params: { exact: true } }
     );
 
     const data = Array.isArray(response.data)

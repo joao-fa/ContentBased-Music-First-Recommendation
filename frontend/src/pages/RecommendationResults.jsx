@@ -6,6 +6,10 @@ import "../styles/Home.css";
 import "../styles/Recommender.css";
 import api from "../api";
 
+const RANDOM_LIST_TYPE = "randomList";
+const GREATEST_VARIATION_LIST_TYPE = "greatestVariationList";
+const FURTHEST_FROM_THE_MEDIAN_LIST_TYPE = "furthestFromTheMedianList";
+
 export default function RecommendationResults() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -17,10 +21,20 @@ export default function RecommendationResults() {
     selected_track,
     random_list,
     variable_based_list,
+    variable_based_strategy,
     used_feature,
     reference_feature_value,
+    reference_feature_median,
+    reference_feature_std_deviation,
+    reference_distance_from_median,
+    cluster_metadata_snapshot,
     cluster,
   } = data || {};
+
+  const resolvedVariableBasedStrategy =
+    variable_based_strategy === FURTHEST_FROM_THE_MEDIAN_LIST_TYPE
+      ? FURTHEST_FROM_THE_MEDIAN_LIST_TYPE
+      : GREATEST_VARIATION_LIST_TYPE;
 
   const createSessionUuid = () => {
     if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -48,13 +62,13 @@ export default function RecommendationResults() {
 
     const randomListConfig = {
       displayLabel: shouldShowRandomFirst ? "Lista 1" : "Lista 2",
-      listType: "listRandom",
+      listType: RANDOM_LIST_TYPE,
       tracks: initialRandomList,
     };
 
     const variableBasedListConfig = {
       displayLabel: shouldShowRandomFirst ? "Lista 2" : "Lista 1",
-      listType: "listVariableBased",
+      listType: resolvedVariableBasedStrategy,
       tracks: initialVariableBasedList,
     };
 
@@ -68,17 +82,20 @@ export default function RecommendationResults() {
     }, {});
 
     frozenListsRef.current = {
-      listRandom: initialRandomList,
-      listVariableBased: initialVariableBasedList,
+      randomList: initialRandomList,
+      variableBasedList: initialVariableBasedList,
+      variableBasedStrategy: resolvedVariableBasedStrategy,
       displayedLists,
       displayOrderConfig,
     };
   }
 
-  const listRandom = frozenListsRef.current?.listRandom ?? [];
-  const listVariableBased = frozenListsRef.current?.listVariableBased ?? [];
+  const randomList = frozenListsRef.current?.randomList ?? [];
+  const variableBasedList = frozenListsRef.current?.variableBasedList ?? [];
   const displayedLists = frozenListsRef.current?.displayedLists ?? [];
   const displayOrderConfig = frozenListsRef.current?.displayOrderConfig ?? {};
+  const frozenVariableBasedStrategy =
+    frozenListsRef.current?.variableBasedStrategy ?? resolvedVariableBasedStrategy;
 
   const [ratings, setRatings] = useState({});
   const [errorMsg, setErrorMsg] = useState("");
@@ -202,9 +219,14 @@ export default function RecommendationResults() {
         experiment_config: {
           used_feature: used_feature ?? null,
           reference_feature_value: reference_feature_value ?? null,
+          reference_feature_median: reference_feature_median ?? null,
+          reference_feature_std_deviation: reference_feature_std_deviation ?? null,
+          reference_distance_from_median: reference_distance_from_median ?? null,
+          variable_based_strategy: frozenVariableBasedStrategy,
           cluster: cluster ?? selected_track?.cluster ?? null,
-          random_list_size: listRandom.length,
-          variable_based_list_size: listVariableBased.length,
+          cluster_metadata_snapshot: cluster_metadata_snapshot ?? null,
+          random_list_size: randomList.length,
+          variable_based_list_size: variableBasedList.length,
           display_order: displayOrderConfig,
         },
 
@@ -216,13 +238,13 @@ export default function RecommendationResults() {
         recommendation_cluster: selected_track?.cluster ?? null,
 
         items: [
-          ...listRandom.map((track, index) => {
-            const trackKey = getTrackKey(track, index, "listRandom");
+          ...randomList.map((track, index) => {
+            const trackKey = getTrackKey(track, index, RANDOM_LIST_TYPE);
 
             return {
               track_id: track.id,
               order_in_list: index + 1,
-              list_type: "listRandom",
+              list_type: RANDOM_LIST_TYPE,
               rating: Number(ratings[trackKey]),
               language_influenced_rating:
                 languageHadImpact === true &&
@@ -238,13 +260,13 @@ export default function RecommendationResults() {
             };
           }),
 
-          ...listVariableBased.map((track, index) => {
-            const trackKey = getTrackKey(track, index, "listVariableBased");
+          ...variableBasedList.map((track, index) => {
+            const trackKey = getTrackKey(track, index, frozenVariableBasedStrategy);
 
             return {
               track_id: track.id,
               order_in_list: index + 1,
-              list_type: "listVariableBased",
+              list_type: frozenVariableBasedStrategy,
               rating: Number(ratings[trackKey]),
               language_influenced_rating:
                 languageHadImpact === true &&

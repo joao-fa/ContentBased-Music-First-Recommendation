@@ -1,4 +1,6 @@
 import os
+import random
+import re
 from django.contrib.auth.models import User
 from django.db import transaction
 from django.db.models import F, Value, FloatField
@@ -31,6 +33,15 @@ ALLOWED_SIMILARITY_FEATURES = {
     "instrumentalness",
     "liveness",
     "speechiness",
+}
+
+RANDOM_LIST_TYPE = "randomList"
+GREATEST_VARIATION_LIST_TYPE = "greatestVariationList"
+FURTHEST_FROM_THE_MEDIAN_LIST_TYPE = "furthestFromTheMedianList"
+
+VARIABLE_BASED_LIST_TYPES = {
+    GREATEST_VARIATION_LIST_TYPE,
+    FURTHEST_FROM_THE_MEDIAN_LIST_TYPE,
 }
 
 
@@ -75,6 +86,29 @@ class DefaultPagination(PageNumberPagination):
 # ======================================================
 # CONSULTAS DE ARTISTAS E FAIXAS
 # ======================================================
+def split_artist_names(value):
+    """
+    Divide o campo de artistas em nomes individuais.
+
+    Os datasets podem representar múltiplos artistas em formatos diferentes,
+    por exemplo:
+    - "Martin Garrix;Dubvision"
+    - "Selena Gomez; Rhiana"
+    - "Artist A, Artist B"
+    - "['Artist A', 'Artist B']"
+
+    Para a seleção de artistas, vírgula e ponto e vírgula são tratados como
+    separadores equivalentes.
+    """
+    if not value:
+        return []
+
+    cleaned = str(value).strip().strip("[]").replace("'", "").replace('"', "")
+    parts = re.split(r"[,;]", cleaned)
+
+    return [name.strip() for name in parts if name and name.strip()]
+
+
 class ArtistListView(generics.ListAPIView):
     """
     GET /api/artists/?q=<filtro_parcial_opcional>
@@ -93,13 +127,8 @@ class ArtistListView(generics.ListAPIView):
 
         unique = set()
         for entry in raw_values:
-            if not entry:
-                continue
-            cleaned = entry.strip().strip("[]").replace("'", "").replace('"', "")
-            for name in cleaned.split(","):
-                name = name.strip()
-                if name:
-                    unique.add(name)
+            for name in split_artist_names(entry):
+                unique.add(name)
 
         q = request.query_params.get("q")
         if q:
@@ -129,16 +158,20 @@ class TracksByArtistView(generics.ListAPIView):
     pagination_class = DefaultPagination
 
     def get_queryset(self):
-        artist_name = self.kwargs.get("artist_name")
+        artist_name = (self.kwargs.get("artist_name") or "").strip()
         exact = self.request.query_params.get("exact", "false").lower() == "true"
         search = self.request.query_params.get("q", "").strip()
 
         qs = Track.objects.all()
 
-        if exact:
-            qs = qs.filter(artists__iregex=rf"(^|\W){artist_name}(\W|$)")
-        else:
-            qs = qs.filter(artists__icontains=artist_name)
+        if artist_name:
+            if exact:
+                escaped_artist = re.escape(artist_name)
+                qs = qs.filter(
+                    artists__iregex=rf"(^|[\[,;])\s*['\"]?{escaped_artist}['\"]?\s*([\],;]|$)"
+                )
+            else:
+                qs = qs.filter(artists__icontains=artist_name)
 
         if search:
             qs = qs.filter(name__icontains=search)
@@ -210,10 +243,146 @@ class RecommendationView(generics.GenericAPIView):
     Retorna duas listas:
     - random_list: faixas aleatórias do mesmo cluster da faixa base
     - variable_based_list: faixas do mesmo cluster mais próximas na feature
-      com maior desvio-padrão válido para comparação
+      definida pela estratégia sorteada ou informada.
+
+    Estratégias disponíveis:
+    - greatestVariationList:
+      escolhe a feature de maior desvio-padrão dentro do cluster.
+    - furthestFromTheMedianList:
+      escolhe a feature em que a faixa base está mais distante da mediana
+      do cluster, usando distância padronizada por desvio-padrão.
     """
     permission_classes = [IsAuthenticated]
     serializer_class = InputTrackSerializer
+
+    def _safe_float(self, value):
+        if value is None:
+            return None
+
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    def _resolve_variable_based_strategy(self, request):
+        requested_strategy = (
+            request.data.get("variable_based_strategy")
+            or request.data.get("recommendation_strategy")
+            or request.data.get("strategy")
+        )
+
+        if requested_strategy in VARIABLE_BASED_LIST_TYPES:
+            return requested_strategy
+
+        return random.choice(
+            [
+                GREATEST_VARIATION_LIST_TYPE,
+                FURTHEST_FROM_THE_MEDIAN_LIST_TYPE,
+            ]
+        )
+
+    def _get_cluster_metadata(self, cluster):
+        return list(
+            ClusterMetadata.objects.filter(
+                cluster=cluster,
+                feature__in=ALLOWED_SIMILARITY_FEATURES,
+            )
+        )
+
+    def _build_cluster_metadata_snapshot(self, metas):
+        snapshot = {}
+
+        for meta in metas:
+            snapshot[meta.feature] = {
+                "median": self._safe_float(meta.median),
+                "std_deviation": self._safe_float(meta.std_deviation),
+            }
+
+        return snapshot
+
+    def _select_greatest_variation_feature(self, ref_track, metas):
+        valid_metas = [
+            meta for meta in metas
+            if meta.std_deviation is not None
+        ]
+        valid_metas.sort(
+            key=lambda meta: float(meta.std_deviation),
+            reverse=True
+        )
+
+        for meta in valid_metas:
+            feature = meta.feature
+            ref_value = self._safe_float(getattr(ref_track, feature, None))
+
+            if ref_value is None:
+                continue
+
+            return {
+                "feature": feature,
+                "reference_feature_value": ref_value,
+                "reference_feature_median": self._safe_float(meta.median),
+                "reference_feature_std_deviation": self._safe_float(meta.std_deviation),
+                "reference_distance_from_median": None,
+            }
+
+        return None
+
+    def _select_furthest_from_median_feature(self, ref_track, metas):
+        best_candidate = None
+
+        for meta in metas:
+            feature = meta.feature
+            ref_value = self._safe_float(getattr(ref_track, feature, None))
+            median_value = self._safe_float(meta.median)
+            std_value = self._safe_float(meta.std_deviation)
+
+            if ref_value is None or median_value is None:
+                continue
+
+            raw_distance = abs(ref_value - median_value)
+
+            if std_value is not None and std_value > 0:
+                comparable_distance = raw_distance / std_value
+            else:
+                comparable_distance = raw_distance
+
+            candidate = {
+                "feature": feature,
+                "reference_feature_value": ref_value,
+                "reference_feature_median": median_value,
+                "reference_feature_std_deviation": std_value,
+                "reference_distance_from_median": comparable_distance,
+            }
+
+            if (
+                best_candidate is None
+                or candidate["reference_distance_from_median"] > best_candidate["reference_distance_from_median"]
+            ):
+                best_candidate = candidate
+
+        return best_candidate
+
+    def _select_feature_by_strategy(self, strategy, ref_track, metas):
+        if strategy == FURTHEST_FROM_THE_MEDIAN_LIST_TYPE:
+            return self._select_furthest_from_median_feature(ref_track, metas)
+
+        return self._select_greatest_variation_feature(ref_track, metas)
+
+    def _build_variable_based_list(self, cluster, track_id, feature, reference_feature_value):
+        diff_expr = ExpressionWrapper(
+            Abs(F(feature) - Value(reference_feature_value)),
+            output_field=FloatField(),
+        )
+
+        qs_similar = (
+            Track.objects.filter(cluster=cluster)
+            .exclude(id=track_id)
+            .filter(**{f"{feature}__isnull": False})
+            .annotate(diff=diff_expr)
+            .order_by("diff")[:3]
+        )
+
+        return TrackSerializer(qs_similar, many=True).data
 
     def post(self, request):
         track_data = request.data.get("track")
@@ -244,44 +413,36 @@ class RecommendationView(generics.GenericAPIView):
         )
         random_list = TrackSerializer(qs_random, many=True).data
 
-        used_feature = None
-        reference_feature_value = None
-        variable_based_list = []
+        variable_based_strategy = self._resolve_variable_based_strategy(request)
+        metas = self._get_cluster_metadata(cluster)
+        cluster_metadata_snapshot = self._build_cluster_metadata_snapshot(metas)
 
-        metas = (
-            ClusterMetadata.objects.filter(
-                cluster=cluster,
-                std_deviation__isnull=False,
-                feature__in=ALLOWED_SIMILARITY_FEATURES,
-            )
-            .order_by("-std_deviation")
+        selected_feature_data = self._select_feature_by_strategy(
+            variable_based_strategy,
+            ref_track,
+            metas,
         )
 
-        for meta in metas:
-            feature = meta.feature
+        used_feature = None
+        reference_feature_value = None
+        reference_feature_median = None
+        reference_feature_std_deviation = None
+        reference_distance_from_median = None
+        variable_based_list = []
 
-            ref_value = getattr(ref_track, feature, None)
-            if ref_value is None:
-                continue
+        if selected_feature_data:
+            used_feature = selected_feature_data["feature"]
+            reference_feature_value = selected_feature_data["reference_feature_value"]
+            reference_feature_median = selected_feature_data["reference_feature_median"]
+            reference_feature_std_deviation = selected_feature_data["reference_feature_std_deviation"]
+            reference_distance_from_median = selected_feature_data["reference_distance_from_median"]
 
-            used_feature = feature
-            reference_feature_value = float(ref_value)
-
-            diff_expr = ExpressionWrapper(
-                Abs(F(feature) - Value(reference_feature_value)),
-                output_field=FloatField(),
+            variable_based_list = self._build_variable_based_list(
+                cluster=cluster,
+                track_id=track_id,
+                feature=used_feature,
+                reference_feature_value=reference_feature_value,
             )
-
-            qs_similar = (
-                Track.objects.filter(cluster=cluster)
-                .exclude(id=track_id)
-                .filter(**{f"{feature}__isnull": False})
-                .annotate(diff=diff_expr)
-                .order_by("diff")[:3]
-            )
-
-            variable_based_list = TrackSerializer(qs_similar, many=True).data
-            break
 
         return Response(
             {
@@ -289,8 +450,13 @@ class RecommendationView(generics.GenericAPIView):
                 "cluster": cluster,
                 "random_list": random_list,
                 "variable_based_list": variable_based_list,
+                "variable_based_strategy": variable_based_strategy,
                 "used_feature": used_feature,
                 "reference_feature_value": reference_feature_value,
+                "reference_feature_median": reference_feature_median,
+                "reference_feature_std_deviation": reference_feature_std_deviation,
+                "reference_distance_from_median": reference_distance_from_median,
+                "cluster_metadata_snapshot": cluster_metadata_snapshot,
             }
         )
 
@@ -373,7 +539,7 @@ class RecommendationEvaluationSubmitView(generics.GenericAPIView):
             recommended_track = Track.objects.get(id=item["track_id"])
 
             list_type = item["list_type"]
-            base_metric = None if list_type == "listRandom" else (item.get("base_metric") or used_feature)
+            base_metric = None if list_type == RANDOM_LIST_TYPE else (item.get("base_metric") or used_feature)
 
             recommended_track_name = item.get("recommended_track_name") or recommended_track.name
             recommended_track_artists = item.get("recommended_track_artists") or recommended_track.artists

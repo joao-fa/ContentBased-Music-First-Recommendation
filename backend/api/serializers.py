@@ -50,7 +50,13 @@ class ClusterMetadataSerializer(serializers.ModelSerializer):
 class RecommendationEvaluationItemSerializer(serializers.Serializer):
     track_id = serializers.CharField()
     order_in_list = serializers.IntegerField(min_value=1)
-    list_type = serializers.ChoiceField(choices=["listRandom", "listVariableBased"])
+    list_type = serializers.ChoiceField(
+        choices=[
+            "randomList",
+            "greatestVariationList",
+            "furthestFromTheMedianList",
+        ]
+    )
     rating = serializers.IntegerField(min_value=0, max_value=10)
 
     language_influenced_rating = serializers.BooleanField(required=False, default=False)
