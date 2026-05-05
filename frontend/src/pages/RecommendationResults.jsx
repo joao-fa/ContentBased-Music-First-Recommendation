@@ -191,7 +191,7 @@ export default function RecommendationResults() {
     }
 
     if (languageHadImpact === null) {
-      setErrorMsg("Informe se a língua da música influenciou sua avaliação.");
+      setErrorMsg("Informe se o idioma da música influenciou negativamente sua avaliação.");
       return;
     }
 
@@ -199,7 +199,7 @@ export default function RecommendationResults() {
       languageHadImpact === true &&
       !Object.values(languageImpactedTracks).some(Boolean)
     ) {
-      setErrorMsg("Selecione pelo menos uma música impactada pela língua.");
+      setErrorMsg("Selecione pelo menos uma música impactada pelo idioma.");
       return;
     }
 
@@ -396,7 +396,7 @@ export default function RecommendationResults() {
               checked={Boolean(languageImpactedTracks[trackKey])}
               onChange={() => toggleLanguageImpactTrack(trackKey)}
             />
-            A língua desta música influenciou minha avaliação
+            O idioma desta música influenciou negativamente minha avaliação
           </label>
         )}
 
@@ -658,7 +658,7 @@ export default function RecommendationResults() {
         {showLanguageQuestion && (
           <section className="language-impact-card">
             <h2 className="recommender-subtitle">
-              A língua da música influenciou sua avaliação?
+              O idioma da música influenciou negativamente sua avaliação?
             </h2>
 
             <div className="language-impact-options">
@@ -688,7 +688,7 @@ export default function RecommendationResults() {
 
             {languageHadImpact === true && (
               <p className="recommender-empty" style={{ marginTop: "10px" }}>
-                Marque o checkbox nas músicas em que a língua impactou sua nota.
+                Marque a caixa nas músicas em que o idioma impactou negativamente em sua nota.
               </p>
             )}
           </section>
