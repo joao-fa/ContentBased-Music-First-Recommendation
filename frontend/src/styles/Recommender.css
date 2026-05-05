@@ -384,3 +384,204 @@
   font-size: 13px;
   color: #475569;
 }
+
+/* ==========================================================
+   Ajustes responsivos para Recommender e RecommendationResults
+   ========================================================== */
+
+/* 
+  Corrige overflow causado por width: 100% + margens laterais.
+  Antes, em mobile, width: 100% somado a margin: 25px 15px podia ultrapassar a viewport.
+*/
+.recommender-container {
+  width: calc(100% - 32px);
+  max-width: 1100px !important;
+  margin: 40px auto;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+/* Evita que filhos internos forcem a largura do card */
+.recommender-container,
+.recommender-section,
+.recommender-results-list,
+.recommender-result-item,
+.rating-track-info,
+.track-label,
+.rating-controls,
+.language-impact-card {
+  min-width: 0;
+}
+
+/* A grade pode continuar em duas colunas no desktop */
+.recommender-lists-grid {
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2rem;
+}
+
+/* Item de recomendação mais resistente a títulos longos */
+.recommender-result-item.rating-item {
+  grid-template-columns: minmax(0, 1fr) auto;
+  width: 100%;
+}
+
+/* Controles não devem empurrar a linha para fora da tela */
+.rating-controls {
+  min-width: 0;
+}
+
+.rating-input {
+  max-width: 100%;
+}
+
+/* Tooltip não deve estourar a tela no mobile */
+.evaluation-help-tooltip {
+  max-width: calc(100vw - 64px);
+}
+
+/* Tablets e celulares grandes: listas uma embaixo da outra */
+@media (max-width: 900px) {
+  .recommender-lists-grid {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+}
+
+/* Celular */
+@media (max-width: 700px) {
+  .recommender-container {
+    width: calc(100% - 24px);
+    margin: 24px auto;
+    padding: 24px 16px;
+    border-radius: 18px;
+  }
+
+  .recommender-title {
+    font-size: 28px;
+    line-height: 1.15;
+  }
+
+  .recommender-description,
+  .recommender-subtitle {
+    font-size: 16px;
+    line-height: 1.45;
+  }
+
+  .recommender-search-type {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .recommender-search-type select {
+    width: 100%;
+    min-height: 42px;
+  }
+
+  .recommender-result-item {
+    padding: 12px;
+  }
+
+  .recommender-result-item.rating-item {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    align-items: stretch;
+  }
+
+  .rating-track-info {
+    width: 100%;
+  }
+
+  .rating-item .track-label {
+    -webkit-line-clamp: 3;
+    font-size: 16px;
+    line-height: 1.25;
+  }
+
+  .rating-controls {
+    width: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 44px 44px;
+    gap: 8px;
+    white-space: normal;
+  }
+
+  .rating-input {
+    width: 100%;
+    min-width: 0;
+    height: 42px;
+    font-size: 15px;
+  }
+
+  .spotify-icon-btn {
+    width: 44px;
+    height: 42px;
+  }
+
+  .spotify-embed-container {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .spotify-embed-container iframe {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .language-impact-card {
+    padding: 14px;
+  }
+
+  .language-impact-options label,
+  .language-impact-checkbox {
+    align-items: flex-start;
+    line-height: 1.35;
+  }
+
+  .recommender-actions {
+    margin-top: 1.5rem;
+  }
+
+  .recommender-back-button,
+  .recommender-submit-button {
+    min-height: 46px;
+  }
+
+  .evaluation-help-tooltip {
+    left: auto !important;
+    right: 0 !important;
+    top: calc(100% + 8px) !important;
+    transform: none !important;
+    width: min(260px, calc(100vw - 56px)) !important;
+  }
+}
+
+/* Celulares estreitos */
+@media (max-width: 430px) {
+  .recommender-container {
+    width: calc(100% - 18px);
+    padding: 22px 14px;
+  }
+
+  .recommender-title {
+    font-size: 25px;
+  }
+
+  .recommender-section {
+    margin-top: 1.5rem;
+  }
+
+  .rating-item .track-label {
+    font-size: 15px;
+  }
+
+  .rating-controls {
+    grid-template-columns: minmax(0, 1fr) 40px 40px;
+    gap: 7px;
+  }
+
+  .spotify-icon-btn {
+    width: 40px;
+  }
+}

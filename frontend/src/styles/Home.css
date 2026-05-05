@@ -227,3 +227,113 @@
 .footer-link:hover {
   color: #93c5fd;
 }
+
+/* ==========================================================
+   Ajustes globais de responsividade mobile
+   ========================================================== */
+
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100%;
+  overflow-x: hidden;
+}
+
+body {
+  background: #0d1117;
+}
+
+.home-wrapper {
+  width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+/* Evita que textos longos forcem largura horizontal */
+.site-title,
+.welcome-text,
+.footer-text,
+.footer-info,
+.footer-link {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+/* Header mais previsível em telas pequenas */
+@media (max-width: 700px) {
+  .home-header {
+    width: 100%;
+    padding: 18px 24px;
+    gap: 16px;
+  }
+
+  .header-left {
+    width: 100%;
+    gap: 14px;
+  }
+
+  .header-nav {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .header-button {
+    width: 100%;
+    min-height: 42px;
+  }
+
+  .header-right {
+    width: 100%;
+    margin-top: 0;
+    align-self: stretch;
+    justify-content: flex-end;
+    gap: 12px;
+  }
+
+  .site-title {
+    font-size: 20px;
+    line-height: 1.25;
+  }
+}
+
+/* Home também passa a caber melhor no celular */
+@media (max-width: 600px) {
+  .home-container {
+    width: calc(100% - 32px);
+    margin: 32px auto;
+    padding: 28px 20px;
+  }
+
+  .home-title {
+    font-size: 22px;
+    line-height: 1.25;
+  }
+
+  .home-description {
+    font-size: 14px;
+    margin-bottom: 24px;
+  }
+
+  .home-buttons {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .home-button {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .home-footer {
+    margin-top: 0;
+    padding: 28px 18px 36px;
+  }
+
+  .footer-content {
+    width: 100%;
+    max-width: 100%;
+  }
+}
