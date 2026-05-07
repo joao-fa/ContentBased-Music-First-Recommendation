@@ -26,6 +26,7 @@ class ApiConfig(AppConfig):
             "test",
             "loaddata",
             "dumpdata",
+            "tracks_database_initialization",
             "export_database_to_drive",
             "crontab",
         }
@@ -35,18 +36,21 @@ class ApiConfig(AppConfig):
         if "runserver" in sys.argv and os.environ.get("RUN_MAIN") != "true":
             return
 
-        if os.getenv("BOOTSTRAP_DB", "true").lower() not in {"true", "1", "yes", "y"}:
-            return
-
         logger = AppLogger(__name__)
 
-        def startup_snapshots_enabled():
-            return os.getenv("EXPORT_DATABASE_STARTUP_ENABLED", "false").lower() in {
+        def env_enabled(name, default):
+            return os.getenv(name, default).lower() in {
                 "true",
                 "1",
                 "yes",
                 "y",
             }
+
+        def bootstrap_enabled():
+            return env_enabled("BOOTSTRAP_DB", "true")
+
+        def startup_snapshots_enabled():
+            return env_enabled("EXPORT_DATABASE_STARTUP_ENABLED", "true")
 
         def run_startup_snapshots():
             if not startup_snapshots_enabled():
@@ -112,6 +116,14 @@ class ApiConfig(AppConfig):
                     return
             except Exception as e:
                 logger.error(f"[BOOTSTRAP] Falha ao verificar migrações: {e}")
+                return
+
+            if not bootstrap_enabled():
+                logger.info(
+                    "[BOOTSTRAP] BOOTSTRAP_DB desabilitado; "
+                    "executando apenas snapshots de startup."
+                )
+                run_startup_snapshots()
                 return
 
             got_lock = True
