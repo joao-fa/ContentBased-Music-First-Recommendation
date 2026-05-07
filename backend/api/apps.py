@@ -17,8 +17,17 @@ class ApiConfig(AppConfig):
 
     def ready(self):
         skip_cmds = {
-            "makemigrations", "migrate", "collectstatic", "shell",
-            "createsuperuser", "check", "test", "loaddata", "dumpdata"
+            "makemigrations",
+            "migrate",
+            "collectstatic",
+            "shell",
+            "createsuperuser",
+            "check",
+            "test",
+            "loaddata",
+            "dumpdata",
+            "export_database_to_drive",
+            "crontab",
         }
         if any(cmd in sys.argv for cmd in skip_cmds):
             return
@@ -26,10 +35,60 @@ class ApiConfig(AppConfig):
         if "runserver" in sys.argv and os.environ.get("RUN_MAIN") != "true":
             return
 
-        if os.getenv("BOOTSTRAP_DB", "true").lower() not in {"true", "1", "yes", "y"}:
-            return
-
         logger = AppLogger(__name__)
+
+        def env_enabled(name, default):
+            return os.getenv(name, default).lower() in {
+                "true",
+                "1",
+                "yes",
+                "y",
+            }
+
+        def bootstrap_enabled():
+            return env_enabled("BOOTSTRAP_DB", "true")
+
+        def startup_snapshots_enabled():
+            return env_enabled("EXPORT_DATABASE_STARTUP_ENABLED", "true")
+
+        def run_startup_snapshots():
+            if not startup_snapshots_enabled():
+                return
+
+            got_snapshot_lock = True
+            try:
+                if connection.vendor == "postgresql":
+                    with connection.cursor() as cur:
+                        cur.execute(
+                            "SELECT pg_try_advisory_lock( hashtext(%s) );",
+                            ["database_startup_snapshots_v1"],
+                        )
+                        got_snapshot_lock = bool(cur.fetchone()[0])
+            except Exception as e:
+                logger.warning(f"[BACKUP] Falha ao obter advisory lock: {e}")
+
+            if not got_snapshot_lock:
+                logger.info(
+                    "[BACKUP] Outro processo já está gerando snapshots de startup."
+                )
+                return
+
+            try:
+                logger.info("[BACKUP] Iniciando snapshots de startup...")
+                call_command("export_database_to_drive", profile="startup")
+                logger.info("[BACKUP] Snapshots de startup concluídos.")
+            except Exception as e:
+                logger.error(f"[BACKUP] Erro ao gerar snapshots de startup: {e}")
+            finally:
+                try:
+                    if connection.vendor == "postgresql":
+                        with connection.cursor() as cur:
+                            cur.execute(
+                                "SELECT pg_advisory_unlock( hashtext(%s) );",
+                                ["database_startup_snapshots_v1"],
+                            )
+                except Exception:
+                    pass
 
         def bootstrap():
             max_wait = 30
@@ -50,23 +109,38 @@ class ApiConfig(AppConfig):
                 executor = MigrationExecutor(connections[DEFAULT_DB_ALIAS])
                 plan = executor.migration_plan(executor.loader.graph.leaf_nodes())
                 if plan:
-                    logger.warning("[BOOTSTRAP] Migrações pendentes detectadas — pulando bootstrap.")
+                    logger.warning(
+                        "[BOOTSTRAP] Migrações pendentes detectadas — pulando bootstrap."
+                    )
                     return
             except Exception as e:
                 logger.error(f"[BOOTSTRAP] Falha ao verificar migrações: {e}")
+                return
+
+            if not bootstrap_enabled():
+                logger.info(
+                    "[BOOTSTRAP] BOOTSTRAP_DB desabilitado; "
+                    "executando apenas snapshots de startup."
+                )
+                run_startup_snapshots()
                 return
 
             got_lock = True
             try:
                 if connection.vendor == "postgresql":
                     with connection.cursor() as cur:
-                        cur.execute("SELECT pg_try_advisory_lock( hashtext(%s) );", ["bootstrap_tracks_v1"])
+                        cur.execute(
+                            "SELECT pg_try_advisory_lock( hashtext(%s) );",
+                            ["bootstrap_tracks_v1"],
+                        )
                         got_lock = bool(cur.fetchone()[0])
             except Exception as e:
                 logger.warning(f"[BOOTSTRAP] Falha ao obter advisory lock: {e}")
 
             if not got_lock:
-                logger.info("[BOOTSTRAP] Outro processo já está executando o bootstrap — saindo.")
+                logger.info(
+                    "[BOOTSTRAP] Outro processo já está executando o bootstrap — saindo."
+                )
                 return
 
             retries = 3
@@ -75,9 +149,12 @@ class ApiConfig(AppConfig):
                     logger.info("[BOOTSTRAP] Iniciando tracks_database_initialization...")
                     call_command("tracks_database_initialization")
                     logger.info("[BOOTSTRAP] Concluído com sucesso.")
+                    run_startup_snapshots()
                     break
                 except (OperationalError, ProgrammingError) as e:
-                    logger.error(f"[BOOTSTRAP] Erro de DB (tentativa {attempt}/{retries}): {e}")
+                    logger.error(
+                        f"[BOOTSTRAP] Erro de DB (tentativa {attempt}/{retries}): {e}"
+                    )
                     time.sleep(3 * attempt)
                 except Exception as e:
                     logger.error(f"[BOOTSTRAP] Erro ao inicializar o banco de faixas: {e}")
@@ -85,10 +162,13 @@ class ApiConfig(AppConfig):
             try:
                 if connection.vendor == "postgresql":
                     with connection.cursor() as cur:
-                        cur.execute("SELECT pg_advisory_unlock( hashtext(%s) );", ["bootstrap_tracks_v1"])
+                        cur.execute(
+                            "SELECT pg_advisory_unlock( hashtext(%s) );",
+                            ["bootstrap_tracks_v1"],
+                        )
             except Exception:
                 pass
-            
+
         logger.info("[BOOTSTRAP] Thread de bootstrap criada.")
         t = threading.Thread(target=bootstrap, daemon=True)
         t.start()
