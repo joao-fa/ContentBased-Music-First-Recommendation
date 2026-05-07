@@ -196,3 +196,12 @@ python manage.py export_database_to_drive --profile recurring --database replica
 ```
 
 O comando usa advisory lock no PostgreSQL para evitar execuções concorrentes do cron, faz leituras em chunks, pausa brevemente entre lotes e usa apenas consultas `SELECT`, de forma que avaliações novas continuem sendo gravadas enquanto os snapshots são gerados. Para bases grandes, prefira configurar `EXPORT_DATABASE_DB_ALIAS` para uma réplica de leitura e ajustar `EXPORT_DATABASE_CHUNK_SIZE`/`EXPORT_DATABASE_SLEEP_BETWEEN_CHUNKS` conforme a capacidade do banco.
+
+[BACKEND] ----------------------- DEPLOY VERCEL -----------------------
+
+O backend agora possui entrypoints WSGI compatíveis com a detecção automática do Vercel:
+
+- `wsgi.py`: usado quando o projeto Vercel aponta para a raiz do repositório.
+- `backend/wsgi.py`: usado quando o projeto Vercel aponta para a pasta `backend/`.
+
+Ambos expõem `application` e `app`, apontando para `backend.settings`. Se o deploy usar a raiz do repositório, o `requirements.txt` da raiz redireciona a instalação para `backend/requirements.txt`.
