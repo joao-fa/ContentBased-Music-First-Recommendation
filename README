@@ -199,9 +199,10 @@ O comando usa advisory lock no PostgreSQL para evitar execuções concorrentes d
 
 [BACKEND] ----------------------- DEPLOY VERCEL -----------------------
 
-O backend agora possui entrypoints WSGI compatíveis com a detecção automática do Vercel:
+O backend possui entrypoints WSGI e arquivos de configuração compatíveis com a detecção automática e com o runtime Python do Vercel:
 
-- `wsgi.py`: usado quando o projeto Vercel aponta para a raiz do repositório.
-- `backend/wsgi.py`: usado quando o projeto Vercel aponta para a pasta `backend/`.
+- `wsgi.py`, `app.py`, `api/wsgi.py` e `api/app.py`: usados quando o projeto Vercel aponta para a raiz do repositório.
+- `backend/wsgi.py`, `backend/app.py` e `backend/pyproject.toml`: usados quando o projeto Vercel aponta para a pasta `backend/`.
+- `backend/backend/wsgi.py`, `backend/backend/app.py` e `backend/backend/pyproject.toml`: compatibilidade extra caso o root esteja configurado como `backend/backend/`.
 
-Ambos expõem `application` e `app`, apontando para `backend.settings`. Se o deploy usar a raiz do repositório, o `requirements.txt` da raiz redireciona a instalação para `backend/requirements.txt`.
+Todos os entrypoints expõem `application` e `app`, apontando para `backend.settings`. Os arquivos `vercel.json` direcionam as requisições para o `wsgi.py` do respectivo root. Se o deploy usar a raiz do repositório, o `requirements.txt` da raiz redireciona a instalação para `backend/requirements.txt` e o `pyproject.toml` declara `app = "wsgi:app"`, que é uma das formas aceitas pelo Vercel para localizar a aplicação Django.

@@ -8,6 +8,14 @@ https://docs.djangoproject.com/en/5.2/howto/deployment/wsgi/
 """
 
 import os
+import sys
+from pathlib import Path
+
+PROJECT_DIR = Path(__file__).resolve().parent
+BACKEND_ROOT = PROJECT_DIR.parent
+
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
 
 from django.core.wsgi import get_wsgi_application
 
