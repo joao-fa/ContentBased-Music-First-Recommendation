@@ -22,6 +22,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
 
+def env_bool(name, default=False):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.lower() in {"true", "1", "yes", "y"}
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
@@ -63,6 +70,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django_crontab",
     "api",
     "rest_framework",
     "corsheaders",
@@ -168,3 +176,16 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
+
+# Database CSV snapshots
+# Use `python manage.py crontab add` in environments that support system cron.
+# The default schedule creates recommendation snapshots hourly.
+if env_bool("EXPORT_DATABASE_CRON_ENABLED", True):
+    CRONJOBS = [
+        (
+            os.getenv("EXPORT_DATABASE_CRON_SCHEDULE", "0 * * * *"),
+            "api.cron.export_recurring_database_snapshots",
+        ),
+    ]
+else:
+    CRONJOBS = []

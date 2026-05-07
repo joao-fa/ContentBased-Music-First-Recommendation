@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 from django.conf import settings
+from django.core.management import call_command
 from django.core.management.base import BaseCommand
 from django.db import connection, transaction
 from dotenv import load_dotenv
@@ -48,6 +49,13 @@ READ_DTYPES = {
 }
 
 STRING_COLUMNS = ["id", "name", "explicit", "artists", "id_artists", "release_date"]
+
+
+def env_bool(name, default=False):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.lower() in {"true", "1", "yes", "y"}
 
 
 def sanitize_scalar(value, default=None):
@@ -386,3 +394,19 @@ class Command(BaseCommand):
             logger.info("[INFO] Tempo de clusterização: pulado (modelo já existia).")
         logger.info(f"[INFO] Tempo de cálculo de metadados: {metadata_time:.2f} minutos.")
         logger.info("=====================================")
+
+        if env_bool("EXPORT_DATABASE_STARTUP_ENABLED", True):
+            try:
+                logger.info(
+                    "[BACKUP] Gerando snapshots de tracks e cluster_metadata após "
+                    "tracks_database_initialization..."
+                )
+                call_command("export_database_to_drive", profile="startup")
+                logger.info("[BACKUP] Snapshots de startup concluídos.")
+            except Exception as e:
+                logger.error(f"[BACKUP] Erro ao gerar snapshots de startup: {e}")
+        else:
+            logger.info(
+                "[BACKUP] Snapshots de startup desabilitados por "
+                "EXPORT_DATABASE_STARTUP_ENABLED."
+            )

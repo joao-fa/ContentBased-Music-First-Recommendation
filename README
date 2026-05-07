@@ -103,3 +103,107 @@ npm run dev
 [FRONTEND] ---------------------- INICIAR FRONT ----------------------- 
 
 npm run dev
+
+
+[BACKEND] ----------------------- EXPORTAR CSV PARA GOOGLE DRIVE -----------------------
+
+O backend possui um comando de gerenciamento para extrair snapshots do banco em `.csv` e, se configurado, fazer upload para subpastas no Google Drive:
+
+```bash
+cd backend
+python manage.py export_database_to_drive --profile recurring
+```
+
+Perfis disponíveis:
+
+- `recurring` (padrão para cron): exporta `recommendation_evaluations` e `recommendation_batches` a cada execução, mantendo por padrão os 24 arquivos mais recentes de cada pasta.
+- `startup`: exporta `tracks` e `cluster_metadata`, indicado para rodar apenas na inicialização do sistema, mantendo por padrão os 3 arquivos mais recentes de cada pasta.
+- `all`: exporta todos os datasets.
+
+Estrutura criada no Drive:
+
+```text
+GOOGLE_DRIVE_FOLDER_ID/recommendation_evaluations/{até 24 arquivos mais recentes}
+GOOGLE_DRIVE_FOLDER_ID/recommendation_batches/{até 24 arquivos mais recentes}
+GOOGLE_DRIVE_FOLDER_ID/tracks/{até 3 arquivos mais recentes}
+GOOGLE_DRIVE_FOLDER_ID/cluster_metadata/{até 3 arquivos mais recentes}
+```
+
+Variáveis de ambiente aceitas:
+
+```env
+# Escolha uma das três opções de credencial abaixo:
+GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_BASE64=...
+GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON={...}
+GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE=/caminho/para/service-account.json
+
+# Pasta raiz no Drive. Compartilhe essa pasta com o e-mail da service account.
+GOOGLE_DRIVE_FOLDER_ID=...
+
+# Cron horário. Requer django-crontab e instalação do cron no ambiente.
+EXPORT_DATABASE_CRON_ENABLED=true
+EXPORT_DATABASE_CRON_SCHEDULE=0 * * * *
+
+# Perfis parametrizáveis.
+EXPORT_DATABASE_RECURRING_DATASETS=recommendation_evaluations,recommendation_batches
+EXPORT_DATABASE_STARTUP_DATASETS=tracks,cluster_metadata
+EXPORT_DATABASE_ALL_DATASETS=cluster_metadata,recommendation_batches,recommendation_evaluations,tracks
+
+# Retenção parametrizável por dataset.
+EXPORT_DATABASE_RETENTION_RECOMMENDATION_EVALUATIONS=24
+EXPORT_DATABASE_RETENTION_RECOMMENDATION_BATCHES=24
+EXPORT_DATABASE_RETENTION_TRACKS=3
+EXPORT_DATABASE_RETENTION_CLUSTER_METADATA=3
+
+# Opcionais para controlar impacto e exportação.
+EXPORT_DATABASE_OUTPUT_DIR=exports
+EXPORT_DATABASE_CHUNK_SIZE=1000
+EXPORT_DATABASE_SLEEP_BETWEEN_CHUNKS=0.05
+EXPORT_DATABASE_DB_ALIAS=default
+EXPORT_DATABASE_SKIP_UPLOAD=false
+EXPORT_DATABASE_KEEP_LOCAL=false
+EXPORT_DATABASE_SKIP_RETENTION=false
+EXPORT_DATABASE_SKIP_LOCK=false
+
+# Gera snapshots de tracks e cluster_metadata na inicialização.
+# Se BOOTSTRAP_DB=true, ocorre no fim de tracks_database_initialization.
+EXPORT_DATABASE_STARTUP_ENABLED=true
+```
+
+Para usar o Drive da sua conta, crie uma credencial do tipo **service account** no Google Cloud, habilite a Google Drive API e compartilhe a pasta raiz do Drive com o e-mail dessa service account. Em seguida, salve o JSON da credencial em uma das variáveis acima, preferencialmente em `GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_BASE64` para evitar problemas com quebras de linha em ambientes de deploy.
+
+Atenção: `EXPORT_DATABASE_CRON_ENABLED=true` apenas registra a configuração em `CRONJOBS`; ele não executa o backup imediatamente ao iniciar o backend. Para o cron rodar de hora em hora, habilite o cron via `django-crontab` em um ambiente com cron do sistema:
+
+```bash
+cd backend
+python manage.py crontab add
+python manage.py crontab show
+```
+
+Exemplos úteis:
+
+```bash
+# Snapshot horário/manual das recomendações, com retenção padrão de 24 arquivos por pasta.
+python manage.py export_database_to_drive --profile recurring
+
+# Snapshot de inicialização para músicas e metadados, com retenção padrão de 3 arquivos por pasta.
+python manage.py export_database_to_drive --profile startup
+
+# Exporta apenas um dataset específico e só gera o CSV local, sem upload.
+python manage.py export_database_to_drive --dataset recommendation_evaluations --skip-upload --keep-local
+
+# Usa uma réplica de leitura configurada no Django para reduzir impacto no banco primário.
+python manage.py export_database_to_drive --profile recurring --database replica
+```
+
+Ao iniciar o backend, os snapshots de `tracks` e `cluster_metadata` rodam pelo perfil `startup` quando `EXPORT_DATABASE_STARTUP_ENABLED=true` (padrão). Se `BOOTSTRAP_DB=true`, eles são executados no fim do comando `tracks_database_initialization`, após a carga de músicas e o cálculo de `cluster_metadata`; se `BOOTSTRAP_DB=false`, eles rodam na inicialização após a verificação do banco e das migrações. O comando usa advisory lock no PostgreSQL para evitar execuções concorrentes do cron, faz leituras em chunks, pausa brevemente entre lotes e usa apenas consultas `SELECT`, de forma que avaliações novas continuem sendo gravadas enquanto os snapshots são gerados. Para bases grandes, prefira configurar `EXPORT_DATABASE_DB_ALIAS` para uma réplica de leitura e ajustar `EXPORT_DATABASE_CHUNK_SIZE`/`EXPORT_DATABASE_SLEEP_BETWEEN_CHUNKS` conforme a capacidade do banco.
+
+[BACKEND] ----------------------- DEPLOY VERCEL -----------------------
+
+O backend possui entrypoints WSGI e arquivos de configuração compatíveis com a detecção automática e com o runtime Python do Vercel:
+
+- `wsgi.py`, `app.py`, `api/wsgi.py` e `api/app.py`: usados quando o projeto Vercel aponta para a raiz do repositório.
+- `backend/wsgi.py`, `backend/app.py` e `backend/pyproject.toml`: usados quando o projeto Vercel aponta para a pasta `backend/`.
+- `backend/backend/wsgi.py`, `backend/backend/app.py` e `backend/backend/pyproject.toml`: compatibilidade extra caso o root esteja configurado como `backend/backend/`.
+
+Todos os entrypoints expõem `application` e `app`, apontando para `backend.settings`. Os arquivos `vercel.json` direcionam as requisições para o `wsgi.py` do respectivo root. Se o deploy usar a raiz do repositório, o `requirements.txt` da raiz redireciona a instalação para `backend/requirements.txt` e o `pyproject.toml` declara `app = "wsgi:app"`, que é uma das formas aceitas pelo Vercel para localizar a aplicação Django.
