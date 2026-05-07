@@ -470,10 +470,6 @@
    Ajustes responsivos para Recommender e RecommendationResults
    ========================================================== */
 
-/* 
-  Corrige overflow causado por width: 100% + margens laterais.
-  Antes, em mobile, width: 100% somado a margin: 25px 15px podia ultrapassar a viewport.
-*/
 .recommender-container {
   width: calc(100% - 32px);
   max-width: 1100px !important;
@@ -634,7 +630,9 @@
     right: 0 !important;
     top: calc(100% + 8px) !important;
     transform: none !important;
-    width: min(260px, calc(100vw - 56px)) !important;
+    width: min(260px, calc(100vw - 48px)) !important;
+    max-width: calc(100vw - 48px) !important;
+    overflow-wrap: anywhere !important;
   }
 }
 
@@ -732,6 +730,8 @@
   line-height: 1.35;
   white-space: nowrap;
   box-shadow: 0 4px 8px rgba(37, 99, 235, 0.22);
+  position: relative;
+  overflow: visible;
 }
 
 .recommender-database-help:hover {
@@ -743,7 +743,6 @@
   display: inline-flex;
   align-items: center;
   cursor: help;
-  position: relative;
   color: #ffffff;
 }
 
@@ -751,7 +750,8 @@
   position: absolute;
   right: 0;
   top: calc(100% + 10px);
-  width: 280px;
+  width: min(280px, calc(100vw - 48px));
+  max-width: calc(100vw - 48px);
   padding: 10px 12px;
   border-radius: 8px;
   background: #111827;
@@ -761,15 +761,19 @@
   font-weight: 400;
   opacity: 0;
   visibility: hidden;
+  pointer-events: none;
   transition: opacity 0.15s ease-in-out;
-  z-index: 30;
+  z-index: 80;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
   white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .recommender-database-tooltip-wrapper:hover .recommender-database-tooltip,
 .recommender-database-tooltip-wrapper:focus .recommender-database-tooltip,
-.recommender-database-tooltip-wrapper:focus-within .recommender-database-tooltip {
+.recommender-database-tooltip-wrapper:focus-within .recommender-database-tooltip,
+.recommender-database-help:hover .recommender-database-tooltip,
+.recommender-database-help:focus-within .recommender-database-tooltip {
   opacity: 1;
   visibility: visible;
 }
@@ -809,8 +813,10 @@
 
   .recommender-database-tooltip {
     left: 0;
-    right: auto;
-    width: min(280px, calc(100vw - 56px));
+    right: 0;
+    top: calc(100% + 8px);
+    width: auto;
+    max-width: none;
   }
 }
 
