@@ -24,7 +24,88 @@
   margin-bottom: 20px;
 }
 
-/* Tipo de busca */
+/* Escolha visual do tipo de pesquisa */
+.recommender-type-chooser {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px;
+  margin: 24px 0 28px;
+}
+
+.recommender-type-chooser-selected {
+  gap: 16px;
+  margin: 18px 0 24px;
+}
+
+.recommender-type-card {
+  width: 100%;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 18px;
+  background: #ffffff;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
+  transition: transform 0.18s ease-in-out, box-shadow 0.18s ease-in-out,
+    border-color 0.18s ease-in-out, background-color 0.18s ease-in-out;
+}
+
+.recommender-type-card:hover {
+  transform: translateY(-3px);
+  border-color: #93c5fd;
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.22);
+}
+
+.recommender-type-card.selected {
+  border-color: #2563eb;
+  background: #eff6ff;
+  box-shadow: 0 10px 26px rgba(37, 99, 235, 0.28);
+}
+
+.recommender-type-image {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  display: block;
+}
+
+.recommender-type-card-body {
+  padding: 16px 18px 18px;
+}
+
+.recommender-type-card-body h2 {
+  margin: 0 0 6px;
+  color: #1e293b;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.recommender-type-card-body p {
+  margin: 0;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.recommender-type-chooser-selected .recommender-type-image {
+  aspect-ratio: 16 / 7;
+}
+
+.recommender-type-chooser-selected .recommender-type-card-body {
+  padding: 12px 14px 14px;
+}
+
+.recommender-type-chooser-selected .recommender-type-card-body h2 {
+  font-size: 16px;
+}
+
+.recommender-type-chooser-selected .recommender-type-card-body p {
+  font-size: 12px;
+}
+
+/* Tipo de busca antigo - mantido por compatibilidade */
 .recommender-search-type {
   display: flex;
   align-items: center;
@@ -583,5 +664,306 @@
 
   .spotify-icon-btn {
     width: 40px;
+  }
+}
+
+/* ==========================================================
+   Busca automática / typeahead
+   ========================================================== */
+
+.recommender-search-helper {
+  margin: -6px 0 14px;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.recommender-form .recommender-input {
+  width: 100%;
+}
+
+/* Quando a busca tem apenas input, ele deve ocupar toda a linha */
+.recommender-form:has(.recommender-input:only-child) {
+  width: 100%;
+}
+
+/* Melhora a leitura dos resultados em buscas progressivas */
+.recommender-result-item .track-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Evita que o badge de selecionado aperte demais o texto */
+.track-selected-badge {
+  flex-shrink: 0;
+}
+
+/* Linha de pesquisa com caixa auxiliar */
+.recommender-search-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 30%);
+  align-items: stretch;
+  gap: 12px;
+  width: 100%;
+  margin-bottom: 12px;
+}
+
+.recommender-search-row .recommender-form {
+  margin-bottom: 0;
+}
+
+.recommender-search-row .recommender-input {
+  min-height: 42px;
+}
+
+.recommender-database-help {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid #2563eb;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: nowrap;
+  box-shadow: 0 4px 8px rgba(37, 99, 235, 0.22);
+}
+
+.recommender-database-help:hover {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+}
+
+.recommender-database-tooltip-wrapper {
+  display: inline-flex;
+  align-items: center;
+  cursor: help;
+  position: relative;
+  color: #ffffff;
+}
+
+.recommender-database-tooltip {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 10px);
+  width: 280px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #111827;
+  color: #ffffff;
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 400;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease-in-out;
+  z-index: 30;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
+  white-space: normal;
+}
+
+.recommender-database-tooltip-wrapper:hover .recommender-database-tooltip,
+.recommender-database-tooltip-wrapper:focus .recommender-database-tooltip,
+.recommender-database-tooltip-wrapper:focus-within .recommender-database-tooltip {
+  opacity: 1;
+  visibility: visible;
+}
+
+@media (max-width: 700px) {
+  .recommender-type-chooser,
+  .recommender-type-chooser-selected {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    margin: 20px 0 24px;
+  }
+
+  .recommender-type-image,
+  .recommender-type-chooser-selected .recommender-type-image {
+    aspect-ratio: 16 / 9;
+  }
+
+  .recommender-type-card-body {
+    padding: 14px 15px 16px;
+  }
+
+  .recommender-search-helper {
+    font-size: 12px;
+    margin-top: -4px;
+  }
+
+  .recommender-search-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .recommender-database-help {
+    width: 100%;
+    justify-content: flex-start;
+    white-space: normal;
+  }
+
+  .recommender-database-tooltip {
+    left: 0;
+    right: auto;
+    width: min(280px, calc(100vw - 56px));
+  }
+}
+
+/* ==========================================================
+   Tela de avaliação concluída
+   ========================================================== */
+
+.recommendation-completion-container {
+  max-width: 1180px !important;
+}
+
+.recommendation-completion-text {
+  margin-top: 0.75rem;
+  margin-bottom: 2rem;
+  color: #475569;
+  line-height: 1.65;
+  max-width: 850px;
+}
+
+.recommendation-completion-question {
+  margin: 0 0 18px;
+  color: #1e293b;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.recommendation-completion-actions {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  width: 100%;
+}
+
+.recommendation-completion-card {
+  width: 100%;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 18px;
+  background: #ffffff;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
+  transition: transform 0.18s ease-in-out, box-shadow 0.18s ease-in-out,
+    border-color 0.18s ease-in-out, background-color 0.18s ease-in-out;
+}
+
+.recommendation-completion-card:hover {
+  transform: translateY(-3px);
+  border-color: #93c5fd;
+  background: #eff6ff;
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.22);
+}
+
+.recommendation-completion-card-image-frame {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  flex: 0 0 auto;
+  background: #dbeafe;
+}
+
+.recommendation-completion-card-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
+  display: block;
+}
+
+.recommendation-completion-card-image-references {
+  object-position: center top;
+}
+
+.recommendation-completion-card-body {
+  padding: 14px 15px 16px;
+  flex: 1 1 auto;
+  min-height: 94px;
+  display: flex;
+  flex-direction: column;
+}
+
+.recommendation-completion-card-body h2 {
+  margin: 0 0 6px;
+  color: #1e293b;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.recommendation-completion-card-body p {
+  margin: 0;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+@media (max-width: 1000px) {
+  .recommendation-completion-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .recommendation-completion-container {
+    max-width: none !important;
+  }
+
+  .recommendation-completion-text {
+    margin-bottom: 1.5rem;
+    font-size: 15px;
+  }
+
+  .recommendation-completion-question {
+    font-size: 19px;
+  }
+
+  .recommendation-completion-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .recommendation-completion-card-image-frame {
+    aspect-ratio: 16 / 10;
+  }
+
+  .recommendation-completion-card-body {
+    padding: 12px;
+  }
+
+  .recommendation-completion-card-body h2 {
+    font-size: 13px;
+  }
+
+  .recommendation-completion-card-body p {
+    font-size: 11px;
+  }
+
+  .recommendation-completion-card-body {
+    min-height: 86px;
+  }
+}
+
+@media (max-width: 430px) {
+  .recommendation-completion-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .recommendation-completion-card-image-frame {
+    aspect-ratio: 16 / 8;
   }
 }

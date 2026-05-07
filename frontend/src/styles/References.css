@@ -23,6 +23,8 @@
   max-width: 220px;
   aspect-ratio: 1 / 1;
   object-fit: cover;
+  object-position: center center;
+  display: block;
   border-radius: 16px;
   border: 3px solid #dbeafe;
   box-shadow: 0 4px 14px rgba(37, 99, 235, 0.18);
@@ -174,6 +176,8 @@
   width: 100%;
   max-height: 220px;
   object-fit: cover;
+  object-position: center center;
+  display: block;
   border-radius: 12px;
   margin-bottom: 14px;
   border: 1px solid #dbe3ee;
@@ -198,6 +202,10 @@
     justify-items: center;
   }
 
+  .references-profile-image {
+    max-width: 220px;
+  }
+
   .references-grid {
     grid-template-columns: 1fr;
   }
@@ -213,12 +221,30 @@
     padding: 20px 16px;
   }
 
+  .references-profile-card {
+    padding: 18px;
+    gap: 18px;
+  }
+
+  .references-profile-image {
+    max-width: 190px;
+  }
+
   .references-title {
     font-size: 24px;
   }
 
+  .references-description {
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
   .references-card {
     padding: 18px;
+  }
+
+  .references-card-header h2 {
+    font-size: 18px;
   }
 
   .references-link-button {

@@ -2,6 +2,10 @@ import { HelpCircle, Play } from "lucide-react";
 import { FaSpotify } from "react-icons/fa";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useMemo, useRef, useState } from "react";
+import returnImage from "../assets/recommender/return.png";
+import referencesImage from "../assets/references/profile.png";
+import myRecommendationsImage from "../assets/recommender/my_recommendations.png";
+import newRecommendationImage from "../assets/recommender/new_recommendation.png";
 import "../styles/Home.css";
 import "../styles/Recommender.css";
 import api from "../api";
@@ -9,6 +13,69 @@ import api from "../api";
 const RANDOM_LIST_TYPE = "randomList";
 const GREATEST_VARIATION_LIST_TYPE = "greatestVariationList";
 const FURTHEST_FROM_THE_MEDIAN_LIST_TYPE = "furthestFromTheMedianList";
+
+function CompletionActionChooser({ onNavigate }) {
+  const actions = [
+    {
+      title: "Voltar para a tela inicial",
+      description: "Retorne para a página principal do sistema.",
+      image: returnImage,
+      alt: "Ilustração representando retorno para a tela inicial",
+      path: "/",
+    },
+    {
+      title: "Acessar referências",
+      description: "Consulte mais informações sobre o projeto, autor e orientadores.",
+      image: referencesImage,
+      imageClass: "recommendation-completion-card-image-references",
+      alt: "Imagem representando a página de referências",
+      path: "/references",
+    },
+    {
+      title: "Conferir suas recomendações",
+      description: "Veja o histórico das recomendações que você já avaliou.",
+      image: myRecommendationsImage,
+      alt: "Ilustração representando minhas recomendações",
+      path: "/my-recommendations",
+    },
+    {
+      title: "Nova recomendação",
+      description: "Inicie uma nova busca e avalie novas recomendações.",
+      image: newRecommendationImage,
+      alt: "Ilustração representando uma nova recomendação",
+      path: "/recommender",
+    },
+  ];
+
+  return (
+    <section
+      className="recommendation-completion-actions"
+      aria-label="Ações após avaliação concluída"
+    >
+      {actions.map((action) => (
+        <button
+          key={action.path}
+          type="button"
+          className="recommendation-completion-card"
+          onClick={() => onNavigate(action.path)}
+        >
+          <div className="recommendation-completion-card-image-frame">
+            <img
+              src={action.image}
+              alt={action.alt}
+              className={`recommendation-completion-card-image ${action.imageClass || ""}`.trim()}
+            />
+          </div>
+
+          <div className="recommendation-completion-card-body">
+            <h2>{action.title}</h2>
+            <p>{action.description}</p>
+          </div>
+        </button>
+      ))}
+    </section>
+  );
+}
 
 export default function RecommendationResults() {
   const location = useLocation();
@@ -440,29 +507,21 @@ export default function RecommendationResults() {
           </div>
         </header>
 
-        <main className="form-container recommender-container">
+        <main className="form-container recommender-container recommendation-completion-container">
           <h1 className="recommender-title">Avaliação concluída</h1>
 
-          <p className="recommender-subtitle" style={{ marginTop: "0.75rem" }}>
+          <p className="recommender-subtitle recommendation-completion-text">
             Obrigado por submeter sua avaliação. Sua participação contribui para a análise
-            da proposta de recomendação musical deste projeto acadêmico.
+            da proposta de recomendação musical deste projeto acadêmico. Quanto mais análises
+            você fizer, mais você me ajuda a comparar as estratégias e entender melhor os
+            resultados do sistema.
           </p>
 
-          <div className="recommender-actions">
-            <button
-              className="form-button home-button recommender-back-button"
-              onClick={() => navigate("/")}
-            >
-              Voltar para a tela inicial
-            </button>
+          <h2 className="recommendation-completion-question">
+            O que deseja fazer agora?
+          </h2>
 
-            <button
-              className="form-button home-button recommender-submit-button"
-              onClick={() => navigate("/recommender")}
-            >
-              Iniciar nova recomendação
-            </button>
-          </div>
+          <CompletionActionChooser onNavigate={navigate} />
         </main>
 
         <footer className="home-footer">
@@ -558,7 +617,7 @@ export default function RecommendationResults() {
       </header>
 
       <main className="form-container recommender-container">
-        <h1 className="recommender-title">Avalie as Recomendações</h1>
+        <h1 className="recommender-title">Avalie as Recomendações de acordo com seu gosto</h1>
 
         <p className="recommender-subtitle" style={{ marginTop: "0.5rem" }}>
           Recomendações geradas para{" "}
