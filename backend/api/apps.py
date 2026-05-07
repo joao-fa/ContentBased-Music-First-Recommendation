@@ -150,6 +150,7 @@ class ApiConfig(AppConfig):
                     logger.info("[BOOTSTRAP] Iniciando tracks_database_initialization...")
                     call_command("tracks_database_initialization")
                     logger.info("[BOOTSTRAP] Concluído com sucesso.")
+                    run_startup_snapshots()
                     break
                 except (OperationalError, ProgrammingError) as e:
                     logger.error(
