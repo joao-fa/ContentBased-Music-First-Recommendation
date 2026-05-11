@@ -1,7 +1,7 @@
 import { HelpCircle, Play } from "lucide-react";
 import { FaSpotify } from "react-icons/fa";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import returnImage from "../assets/recommender/return.png";
 import referencesImage from "../assets/references/profile.png";
 import myRecommendationsImage from "../assets/recommender/my_recommendations.png";
@@ -14,8 +14,10 @@ const RANDOM_LIST_TYPE = "randomList";
 const GREATEST_VARIATION_LIST_TYPE = "greatestVariationList";
 const FURTHEST_FROM_THE_MEDIAN_LIST_TYPE = "furthestFromTheMedianList";
 
+const MOBILE_RECOMMENDATION_TUTORIAL_MEDIA_QUERY = "(max-width: 700px)";
+
 const recommendationTutorialVideoModules = import.meta.glob(
-  "../assets/recommender/scene_*.mp4",
+  "../assets/recommender/*.mp4",
   { eager: true, query: "?url", import: "default" }
 );
 
@@ -26,15 +28,18 @@ const getRecommendationTutorialVideoSrc = (filename) =>
 const recommendationTutorialVideos = [
   {
     title: "Poderá ouvir uma prévia da música recomendada",
-    src: getRecommendationTutorialVideoSrc("scene_1.mp4"),
+    desktopFilename: "scene_1.mp4",
+    mobileFilename: "mobile_scene_1.mp4",
   },
   {
     title: "Poderá abrir a música diretamente pelo Spotify para ouvir na íntegra",
-    src: getRecommendationTutorialVideoSrc("scene_2.mp4"),
+    desktopFilename: "scene_2.mp4",
+    mobileFilename: "mobile_scene_2.mp4",
   },
   {
     title: "Precisará avaliar cada uma das músicas recomendadas",
-    src: getRecommendationTutorialVideoSrc("scene_3.mp4"),
+    desktopFilename: "scene_3.mp4",
+    mobileFilename: "mobile_scene_3.mp4",
   },
 ];
 
@@ -201,6 +206,11 @@ export default function RecommendationResults() {
 
   const [evaluationSubmitted, setEvaluationSubmitted] = useState(false);
   const [showRecommendationIntro, setShowRecommendationIntro] = useState(true);
+  const [useMobileTutorialVideos, setUseMobileTutorialVideos] = useState(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return false;
+
+    return window.matchMedia(MOBILE_RECOMMENDATION_TUTORIAL_MEDIA_QUERY).matches;
+  });
 
   const errorRef = useRef(null);
   const languageQuestionRef = useRef(null);
@@ -225,6 +235,15 @@ export default function RecommendationResults() {
         .filter(Boolean)
     );
   }, [displayedLists]);
+
+  const selectedRecommendationTutorialVideos = useMemo(() => {
+    return recommendationTutorialVideos.map((video) => ({
+      title: video.title,
+      src: getRecommendationTutorialVideoSrc(
+        useMobileTutorialVideos ? video.mobileFilename : video.desktopFilename
+      ),
+    }));
+  }, [useMobileTutorialVideos]);
 
   const getTrackKey = (track, index, listType = "") => {
     if (track?.id) {
@@ -289,6 +308,31 @@ export default function RecommendationResults() {
   const canSubmitEvaluation = showLanguageQuestion
     ? allRatingsComplete && hasLanguageImpactSelection
     : allRatingsComplete;
+
+  useLayoutEffect(() => {
+    if (showRecommendationIntro && typeof window !== "undefined") {
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    }
+  }, [showRecommendationIntro]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return undefined;
+
+    const mediaQuery = window.matchMedia(MOBILE_RECOMMENDATION_TUTORIAL_MEDIA_QUERY);
+    const updateTutorialVideoMode = (event) => {
+      setUseMobileTutorialVideos(event.matches);
+    };
+
+    setUseMobileTutorialVideos(mediaQuery.matches);
+
+    if (mediaQuery.addEventListener) {
+      mediaQuery.addEventListener("change", updateTutorialVideoMode);
+      return () => mediaQuery.removeEventListener("change", updateTutorialVideoMode);
+    }
+
+    mediaQuery.addListener(updateTutorialVideoMode);
+    return () => mediaQuery.removeListener(updateTutorialVideoMode);
+  }, []);
 
   useEffect(() => {
     if (errorMsg) {
@@ -447,7 +491,6 @@ export default function RecommendationResults() {
 
   const handleBackToRecommendationIntro = () => {
     setShowRecommendationIntro(true);
-    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handleAdvanceToRecommendations = () => {
@@ -712,7 +755,7 @@ export default function RecommendationResults() {
             className="recommendation-intro-videos"
             aria-label="Demonstração das ações disponíveis nas recomendações"
           >
-            {recommendationTutorialVideos.map((video, index) => (
+            {selectedRecommendationTutorialVideos.map((video, index) => (
               <article className="recommendation-intro-video-card" key={video.src}>
                 <h2 className="recommendation-intro-video-title">
                   {index + 1}. {video.title}
