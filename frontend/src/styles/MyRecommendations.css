@@ -186,3 +186,17 @@
     width: 100%;
   }
 }
+.my-recommendations-actions {
+  width: 100%;
+}
+
+.my-recommendations-actions .recommender-back-button {
+  min-width: 140px;
+}
+
+@media (max-width: 700px) {
+  .my-recommendations-actions .recommender-back-button {
+    width: 100%;
+    min-height: 44px;
+  }
+}
