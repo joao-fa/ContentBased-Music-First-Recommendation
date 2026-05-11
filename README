@@ -105,9 +105,10 @@ npm run dev
 npm run dev
 
 
-[BACKEND] ----------------------- GERAR DATASETS FINAIS -----------------------
+[BACKEND] ----------------------- EXPORTAR CSV LOCAL -----------------------
 
-Os datasets finais usados pelo sistema são gerados a partir dos CSVs colocados em `backend/api/data/datasets/original_datasets/`. O fluxo esperado é executar os dois scripts abaixo em sequência, a partir da raiz do repositório:
+O backend possui um comando de gerenciamento para extrair snapshots do banco em `.csv` localmente.
+Não há integração automática com Google Drive/Google Cloud nem configuração de cron; quando necessário, execute o comando manualmente no ambiente desejado, por exemplo via PSQL/Shell do Render.
 
 ```bash
 python3 backend/api/data/prepare_datasets.py
@@ -115,27 +116,6 @@ python3 backend/api/data/remove_duplicates.py
 ```
 
 O `prepare_datasets.py` lê os arquivos originais, valida se eles possuem `id` e as colunas essenciais de clusterização, aplica aliases para o schema canônico do projeto, normaliza os tipos dos campos, descarta linhas sem `id` e grava os CSVs intermediários em `backend/api/data/datasets/normalized_datasets/`.
-
-Em seguida, o `remove_duplicates.py` lê os CSVs normalizados, remove duplicidades globais por `id` e por identidade normalizada de música/artista, mantém a variante preferencial quando houver diferença apenas de maiúsculas/minúsculas e grava os arquivos finais em `backend/api/data/datasets/final_datasets/` no formato `tracks_unique.part_*.csv`. Esses arquivos finais são os datasets que devem ser versionados no git e utilizados pelo sistema. As duplicatas descartadas ficam em `backend/api/data/datasets/final_datasets/duplicates_discarded/` para auditoria.
-
-O comando Django `evaluate_clustering.py` complementa esse fluxo ao avaliar diferentes valores de `K` para o KMeans/MiniBatchKMeans, calculando métricas como `silhouette`, `davies_bouldin`, `calinski_harabasz`, inércia e distribuição de tamanhos dos clusters. Esses resultados ajudam a escolher uma quantidade de clusters adequada antes de treinar/usar o algoritmo de recomendação. Exemplo:
-
-```bash
-cd backend
-python manage.py evaluate_clustering --k_range 50:150:10 --use_minibatch --save_csv data/api/cluster_analysiscluster_eval.csv
-```
-
-[BACKEND] ----------------------- EXPORTAR CSV LOCAL -----------------------
-
-O backend possui um comando de gerenciamento para extrair snapshots do banco em `.csv` localmente.
-Não há integração automática com Google Drive/Google Cloud nem configuração de cron; quando necessário, execute o comando manualmente no ambiente desejado, por exemplo via PSQL/Shell do Render.
-
-```bash
-cd backend
-python manage.py export_database_to_drive --profile recurring
-```
-
-Perfis disponíveis:
 
 - `recurring`: exporta `recommendation_evaluations` e `recommendation_batches`.
 - `startup`: exporta `tracks` e `cluster_metadata`.
