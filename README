@@ -111,11 +111,11 @@ O backend possui um comando de gerenciamento para extrair snapshots do banco em 
 Não há integração automática com Google Drive/Google Cloud nem configuração de cron; quando necessário, execute o comando manualmente no ambiente desejado, por exemplo via PSQL/Shell do Render.
 
 ```bash
-cd backend
-python manage.py export_database_to_drive --profile recurring
+python3 backend/api/data/prepare_datasets.py
+python3 backend/api/data/remove_duplicates.py
 ```
 
-Perfis disponíveis:
+O `prepare_datasets.py` lê os arquivos originais, valida se eles possuem `id` e as colunas essenciais de clusterização, aplica aliases para o schema canônico do projeto, normaliza os tipos dos campos, descarta linhas sem `id` e grava os CSVs intermediários em `backend/api/data/datasets/normalized_datasets/`.
 
 - `recurring`: exporta `recommendation_evaluations` e `recommendation_batches`.
 - `startup`: exporta `tracks` e `cluster_metadata`.
