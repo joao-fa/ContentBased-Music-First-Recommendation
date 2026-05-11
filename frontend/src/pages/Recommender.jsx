@@ -1,7 +1,8 @@
 import { HelpCircle } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api";
+import LoadingText from "../components/LoadingText";
 import artistImage from "../assets/recommender/artist.png";
 import songImage from "../assets/recommender/song.png";
 import "../styles/Home.css";
@@ -194,12 +195,30 @@ export default function Recommender() {
   const [artistTrackLoading, setArtistTrackLoading] = useState(false);
   const [artistSelectedTrack, setArtistSelectedTrack] = useState(null);
 
+  const errorRef = useRef(null);
+  const trackSelectionRef = useRef(null);
+  const artistTracksSectionRef = useRef(null);
+  const artistTrackSelectionRef = useRef(null);
+
   const trimmedTrackQuery = useMemo(() => query.trim(), [query]);
   const trimmedArtistQuery = useMemo(() => artistQuery.trim(), [artistQuery]);
   const trimmedArtistTrackQuery = useMemo(
     () => artistTrackQuery.trim(),
     [artistTrackQuery]
   );
+
+  const scrollToElement = (element) => {
+    if (!element) return;
+
+    window.requestAnimationFrame(() => {
+      element.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  };
+
+  const showErrorAndScroll = (message) => {
+    setErrorMsg(message);
+    scrollToElement(errorRef.current);
+  };
 
   const handleLogout = () => {
     localStorage.clear();
@@ -229,6 +248,12 @@ export default function Recommender() {
     const { name } = extractArtistInfo(artist);
     return name;
   };
+
+  useEffect(() => {
+    if (errorMsg) {
+      scrollToElement(errorRef.current);
+    }
+  }, [errorMsg]);
 
   const handleSearchTypeChange = (value) => {
     if (value === searchType) return;
@@ -270,7 +295,7 @@ export default function Recommender() {
     if (trimmedTrackQuery.length < MIN_SEARCH_CHARS) {
       setResults([]);
       setLoading(false);
-      setErrorMsg(`Digite pelo menos ${MIN_SEARCH_CHARS} caracteres para buscar.`);
+      showErrorAndScroll(`Digite pelo menos ${MIN_SEARCH_CHARS} caracteres para buscar.`);
       return;
     }
 
@@ -299,7 +324,7 @@ export default function Recommender() {
         setResults(filtered);
 
         if (!filtered.length) {
-          setErrorMsg(
+          showErrorAndScroll(
             "Não encontramos essa música na base do sistema. Atualmente, a base contempla músicas lançadas entre 1920 e 2023."
           );
         }
@@ -308,7 +333,7 @@ export default function Recommender() {
 
         console.error(err);
         setResults([]);
-        setErrorMsg("Erro ao buscar músicas.");
+        showErrorAndScroll("Erro ao buscar músicas.");
       } finally {
         setLoading(false);
       }
@@ -341,7 +366,7 @@ export default function Recommender() {
     if (trimmedArtistQuery.length < MIN_SEARCH_CHARS) {
       setArtistResults([]);
       setArtistLoading(false);
-      setErrorMsg(`Digite pelo menos ${MIN_SEARCH_CHARS} caracteres para buscar.`);
+      showErrorAndScroll(`Digite pelo menos ${MIN_SEARCH_CHARS} caracteres para buscar.`);
       return;
     }
 
@@ -370,7 +395,7 @@ export default function Recommender() {
         setArtistResults(filtered);
 
         if (!filtered.length) {
-          setErrorMsg(
+          showErrorAndScroll(
             "Não encontramos esse artista ou banda na base do sistema. Atualmente, a base contempla músicas lançadas entre 1920 e 2023."
           );
         }
@@ -379,7 +404,7 @@ export default function Recommender() {
 
         console.error(err);
         setArtistResults([]);
-        setErrorMsg("Erro ao buscar artistas ou bandas.");
+        showErrorAndScroll("Erro ao buscar artistas ou bandas.");
       } finally {
         setArtistLoading(false);
       }
@@ -407,7 +432,7 @@ export default function Recommender() {
     setArtistTrackResults(filtered);
 
     if (artistAllTracks.length > 0 && trimmedArtistTrackQuery && !filtered.length) {
-      setErrorMsg(
+      showErrorAndScroll(
         "Nenhuma faixa desse artista ou banda corresponde ao texto digitado na base disponível."
       );
     } else {
@@ -422,17 +447,18 @@ export default function Recommender() {
 
   const handleSelectTrack = (track) => {
     if (!track?.id) {
-      setErrorMsg("Track inválida.");
+      showErrorAndScroll("Track inválida.");
       return;
     }
 
     setSelectedTrack(track);
     setErrorMsg("");
+    scrollToElement(trackSelectionRef.current);
   };
 
   const handleConfirmSelection = async () => {
     if (!selectedTrack) {
-      setErrorMsg("Selecione uma música antes de continuar.");
+      showErrorAndScroll("Selecione uma música antes de continuar.");
       return;
     }
 
@@ -447,7 +473,7 @@ export default function Recommender() {
       navigate("/recommendation-results", { state: response.data });
     } catch (err) {
       console.error(err);
-      setErrorMsg(
+      showErrorAndScroll(
         "Erro ao gerar recomendações. Por favor, tente novamente mais tarde ou entre em contato com o Administrador."
       );
     } finally {
@@ -477,7 +503,7 @@ export default function Recommender() {
       setArtistTrackResults(sortedData);
 
       if (!data.length) {
-        setErrorMsg(
+        showErrorAndScroll(
           "Nenhuma faixa desse artista ou banda foi encontrada na base disponível."
         );
       }
@@ -485,7 +511,7 @@ export default function Recommender() {
       console.error(err);
       setArtistAllTracks([]);
       setArtistTrackResults([]);
-      setErrorMsg("Erro ao carregar faixas desse artista ou banda.");
+      showErrorAndScroll("Erro ao carregar faixas desse artista ou banda.");
     } finally {
       setArtistTrackLoading(false);
     }
@@ -515,21 +541,23 @@ export default function Recommender() {
     setErrorMsg("");
 
     await fetchArtistTracks(name);
+    scrollToElement(artistTracksSectionRef.current);
   };
 
   const handleSelectArtistTrack = (track) => {
     if (!track?.id) {
-      setErrorMsg("Track inválida.");
+      showErrorAndScroll("Track inválida.");
       return;
     }
 
     setArtistSelectedTrack(track);
     setErrorMsg("");
+    scrollToElement(artistTrackSelectionRef.current);
   };
 
   const handleConfirmArtistTrackSelection = async () => {
     if (!artistSelectedTrack) {
-      setErrorMsg("Selecione uma faixa antes de continuar.");
+      showErrorAndScroll("Selecione uma faixa antes de continuar.");
       return;
     }
 
@@ -544,7 +572,7 @@ export default function Recommender() {
       navigate("/recommendation-results", { state: response.data });
     } catch (err) {
       console.error(err);
-      setErrorMsg(
+      showErrorAndScroll(
         "Erro ao gerar recomendações. Por favor, tente novamente mais tarde ou entre em contato com o Administrador."
       );
     } finally {
@@ -614,7 +642,11 @@ export default function Recommender() {
 
         {searchType && (
           <>
-            {errorMsg && <p className="recommender-error">{errorMsg}</p>}
+            {errorMsg && (
+              <p ref={errorRef} className="recommender-error" tabIndex={-1}>
+                {errorMsg}
+              </p>
+            )}
 
             {searchType === "tracks" && (
               <>
@@ -635,7 +667,7 @@ export default function Recommender() {
 
                 <div className="recommender-results">
                   {loading && (
-                    <p className="recommender-empty">Buscando músicas...</p>
+                    <p className="recommender-empty"><LoadingText label="Buscando músicas" /></p>
                   )}
 
                   {!loading && results.length > 0 && (
@@ -667,7 +699,7 @@ export default function Recommender() {
                   )}
                 </div>
 
-                <div className="recommender-selection">
+                <div className="recommender-selection" ref={trackSelectionRef}>
                   <p>
                     Música selecionada:{" "}
                     {selectedTrack ? (
@@ -681,11 +713,12 @@ export default function Recommender() {
 
                   <button
                     type="button"
-                    className="form-button home-button recommender-confirm-button"
+                    className={`form-button home-button recommender-confirm-button ${!selectedTrack ? "button-disabled-state" : ""}`}
                     onClick={handleConfirmSelection}
-                    disabled={!selectedTrack || loading}
+                    disabled={loading}
+                    aria-disabled={!selectedTrack || loading}
                   >
-                    {loading ? "Aguarde..." : "Confirmar seleção"}
+                    {loading ? <LoadingText label="Aguarde" /> : "Confirmar seleção"}
                   </button>
                 </div>
               </>
@@ -719,7 +752,7 @@ export default function Recommender() {
 
                   <div className="recommender-results">
                     {artistLoading && (
-                      <p className="recommender-empty">Buscando artistas ou bandas...</p>
+                      <p className="recommender-empty"><LoadingText label="Buscando artistas ou bandas" /></p>
                     )}
 
                     {!artistLoading && artistResults.length > 0 && (
@@ -771,13 +804,13 @@ export default function Recommender() {
                 </section>
 
                 {artistConfirmed && selectedArtist && (
-                  <section className="recommender-artist-tracks-section">
+                  <section className="recommender-artist-tracks-section" ref={artistTracksSectionRef}>
                     <h2 className="recommender-subtitle">
                       2. Selecione uma música de {selectedArtist.name}
                     </h2>
 
                     <p className="recommender-search-helper">
-                      Deixe o campo vazio para ver as faixas carregadas do artista ou banda ou digite
+                      Deixe o campo vazio para ver todas as faixas do artista ou digite
                       para filtrar progressivamente.
                     </p>
 
@@ -800,7 +833,7 @@ export default function Recommender() {
                     <div className="recommender-results">
                       {artistTrackLoading && (
                         <p className="recommender-empty">
-                          Carregando faixas do artista ou banda...
+                          <LoadingText label="Carregando faixas do artista ou banda" />
                         </p>
                       )}
 
@@ -835,7 +868,7 @@ export default function Recommender() {
                         )}
                     </div>
 
-                    <div className="recommender-selection">
+                    <div className="recommender-selection" ref={artistTrackSelectionRef}>
                       <p>
                         Música selecionada:{" "}
                         {artistSelectedTrack ? (
@@ -849,11 +882,12 @@ export default function Recommender() {
 
                       <button
                         type="button"
-                        className="form-button home-button recommender-confirm-button"
+                        className={`form-button home-button recommender-confirm-button ${!artistSelectedTrack ? "button-disabled-state" : ""}`}
                         onClick={handleConfirmArtistTrackSelection}
-                        disabled={!artistSelectedTrack || loading}
+                        disabled={loading}
+                        aria-disabled={!artistSelectedTrack || loading}
                       >
-                        {loading ? "Aguarde..." : "Confirmar seleção"}
+                        {loading ? <LoadingText label="Aguarde" /> : "Confirmar seleção"}
                       </button>
                     </div>
                   </section>

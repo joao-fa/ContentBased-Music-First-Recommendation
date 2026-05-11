@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Play, ChevronDown, ChevronUp } from "lucide-react";
 import { FaSpotify } from "react-icons/fa";
 import api from "../api";
+import LoadingText from "../components/LoadingText";
 import "../styles/Home.css";
 import "../styles/Recommender.css";
 import "../styles/MyRecommendations.css";
@@ -106,17 +107,11 @@ export default function MyRecommendations() {
           Visualize as músicas base que você selecionou e as recomendações avaliadas.
         </p>
 
-        <div className="recommender-actions my-recommendations-actions">
-          <button
-            type="button"
-            className="form-button home-button recommender-back-button"
-            onClick={() => navigate("/")}
-          >
-            Voltar
-          </button>
-        </div>
-
-        {loading && <p className="recommender-empty">Carregando recomendações...</p>}
+        {loading && (
+          <p className="recommender-empty">
+            <LoadingText label="Carregando recomendações" />
+          </p>
+        )}
 
         {!loading && errorMsg && <p className="recommender-error">{errorMsg}</p>}
 

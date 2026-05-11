@@ -1,7 +1,7 @@
 import { HelpCircle, Play } from "lucide-react";
 import { FaSpotify } from "react-icons/fa";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import returnImage from "../assets/recommender/return.png";
 import referencesImage from "../assets/references/profile.png";
 import myRecommendationsImage from "../assets/recommender/my_recommendations.png";
@@ -177,6 +177,10 @@ export default function RecommendationResults() {
 
   const [evaluationSubmitted, setEvaluationSubmitted] = useState(false);
 
+  const errorRef = useRef(null);
+  const languageQuestionRef = useRef(null);
+  const recommendationListsRef = useRef(null);
+
   const ratingOptions = useMemo(() => {
     return ["", ...Array.from({ length: 11 }, (_, i) => String(i))];
   }, []);
@@ -217,6 +221,19 @@ export default function RecommendationResults() {
     return null;
   };
 
+  const scrollToElement = (element) => {
+    if (!element) return;
+
+    window.requestAnimationFrame(() => {
+      element.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  };
+
+  const showErrorAndScroll = (message) => {
+    setErrorMsg(message);
+    scrollToElement(errorRef.current);
+  };
+
   const handleLogout = () => {
     localStorage.clear();
     navigate("/login");
@@ -233,13 +250,40 @@ export default function RecommendationResults() {
     }));
   };
 
+  const allRatingsComplete = allDisplayedTracks.every((item) => {
+    const trackKey = getTrackKey(item.t, item.idx, item.listType);
+    const value = ratings[trackKey];
+    return value !== undefined && value !== "";
+  });
+
+  const hasLanguageImpactSelection =
+    languageHadImpact === false ||
+    (languageHadImpact === true &&
+      Object.values(languageImpactedTracks).some(Boolean));
+
+  const canSubmitEvaluation = showLanguageQuestion
+    ? allRatingsComplete && hasLanguageImpactSelection
+    : allRatingsComplete;
+
+  useEffect(() => {
+    if (errorMsg) {
+      scrollToElement(errorRef.current);
+    }
+  }, [errorMsg]);
+
+  useEffect(() => {
+    if (showLanguageQuestion) {
+      scrollToElement(languageQuestionRef.current);
+    }
+  }, [showLanguageQuestion]);
+
   const validateRatings = () => {
     for (const item of allDisplayedTracks) {
       const trackKey = getTrackKey(item.t, item.idx, item.listType);
       const value = ratings[trackKey];
 
       if (value === undefined || value === "") {
-        setErrorMsg("Preencha todas as notas (0 a 10) antes de prosseguir.");
+        showErrorAndScroll("Preencha todas as notas (0 a 10) antes de prosseguir.");
         return false;
       }
     }
@@ -254,11 +298,12 @@ export default function RecommendationResults() {
 
     if (!showLanguageQuestion) {
       setShowLanguageQuestion(true);
+      scrollToElement(languageQuestionRef.current);
       return;
     }
 
     if (languageHadImpact === null) {
-      setErrorMsg("Informe se o idioma da música influenciou negativamente sua avaliação.");
+      showErrorAndScroll("Informe se o idioma da música influenciou negativamente sua avaliação.");
       return;
     }
 
@@ -266,7 +311,7 @@ export default function RecommendationResults() {
       languageHadImpact === true &&
       !Object.values(languageImpactedTracks).some(Boolean)
     ) {
-      setErrorMsg("Selecione pelo menos uma música impactada pelo idioma.");
+      showErrorAndScroll("Selecione pelo menos uma música impactada pelo idioma.");
       return;
     }
 
@@ -365,7 +410,7 @@ export default function RecommendationResults() {
       console.error("Status:", err.response?.status);
       console.error("Resposta do backend:", err.response?.data);
       console.error(err);
-      setErrorMsg(
+      showErrorAndScroll(
         "Erro ao salvar a avaliação. Por favor, tente novamente mais tarde ou entre em contato com o Administrador."
       );
     }
@@ -406,7 +451,14 @@ export default function RecommendationResults() {
     const isEmbedOpen = openEmbedTrackKey === trackKey;
 
     return (
-      <li key={trackKey} className="recommender-result-item rating-item">
+      <li
+        key={trackKey}
+        className={`recommender-result-item rating-item ${
+          showLanguageQuestion && languageHadImpact === true
+            ? "language-impact-selectable"
+            : ""
+        }`}
+      >
         <div className="rating-track-info">
           <div
             className="track-label"
@@ -457,7 +509,7 @@ export default function RecommendationResults() {
         </div>
 
         {showLanguageQuestion && languageHadImpact === true && (
-          <label className="language-impact-checkbox">
+          <label className="language-impact-checkbox language-impact-checkbox-attention">
             <input
               type="checkbox"
               checked={Boolean(languageImpactedTracks[trackKey])}
@@ -688,6 +740,9 @@ export default function RecommendationResults() {
 
         {errorMsg && (
           <div
+            ref={errorRef}
+            tabIndex={-1}
+            className="recommendation-error-card"
             style={{
               marginTop: "1rem",
               padding: "0.75rem 1rem",
@@ -700,7 +755,7 @@ export default function RecommendationResults() {
           </div>
         )}
 
-        <div className="recommender-lists-grid">
+        <div className="recommender-lists-grid" ref={recommendationListsRef}>
           {displayedLists.map((listConfig) => (
             <section className="recommender-section" key={listConfig.displayLabel}>
               <h2 className="recommender-subtitle">{listConfig.displayLabel}</h2>
@@ -715,7 +770,7 @@ export default function RecommendationResults() {
         </div>
 
         {showLanguageQuestion && (
-          <section className="language-impact-card">
+          <section className="language-impact-card" ref={languageQuestionRef}>
             <h2 className="recommender-subtitle">
               O idioma da música influenciou negativamente sua avaliação?
             </h2>
@@ -726,7 +781,10 @@ export default function RecommendationResults() {
                   type="radio"
                   name="languageImpact"
                   checked={languageHadImpact === true}
-                  onChange={() => setLanguageHadImpact(true)}
+                  onChange={() => {
+                    setLanguageHadImpact(true);
+                    scrollToElement(recommendationListsRef.current);
+                  }}
                 />
                 Sim, influenciou uma ou mais avaliações
               </label>
@@ -762,8 +820,9 @@ export default function RecommendationResults() {
           </button>
 
           <button
-            className="form-button home-button recommender-submit-button"
+            className={`form-button home-button recommender-submit-button ${!canSubmitEvaluation ? "button-disabled-state" : ""}`}
             onClick={submitEvaluation}
+            aria-disabled={!canSubmitEvaluation}
           >
             {showLanguageQuestion ? "Confirmar e Salvar Avaliação" : "Submeter Avaliação"}
           </button>
