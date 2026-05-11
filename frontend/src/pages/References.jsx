@@ -292,6 +292,16 @@ export default function References() {
             </ul>
           </article>
         </section>
+
+        <div className="recommender-actions references-actions">
+          <button
+            type="button"
+            className="form-button home-button recommender-back-button"
+            onClick={() => navigate("/")}
+          >
+            Voltar
+          </button>
+        </div>
       </main>
 
       <footer className="home-footer">

@@ -1,7 +1,7 @@
 import { HelpCircle, Play } from "lucide-react";
 import { FaSpotify } from "react-icons/fa";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import returnImage from "../assets/recommender/return.png";
 import referencesImage from "../assets/references/profile.png";
 import myRecommendationsImage from "../assets/recommender/my_recommendations.png";
@@ -13,6 +13,35 @@ import api from "../api";
 const RANDOM_LIST_TYPE = "randomList";
 const GREATEST_VARIATION_LIST_TYPE = "greatestVariationList";
 const FURTHEST_FROM_THE_MEDIAN_LIST_TYPE = "furthestFromTheMedianList";
+
+const MOBILE_RECOMMENDATION_TUTORIAL_MEDIA_QUERY = "(max-width: 700px)";
+
+const recommendationTutorialVideoModules = import.meta.glob(
+  "../assets/recommender/*.mp4",
+  { eager: true, query: "?url", import: "default" }
+);
+
+const getRecommendationTutorialVideoSrc = (filename) =>
+  recommendationTutorialVideoModules[`../assets/recommender/${filename}`] ??
+  `/src/assets/recommender/${filename}`;
+
+const recommendationTutorialVideos = [
+  {
+    title: "Poderá ouvir uma prévia da música recomendada",
+    desktopFilename: "scene_1.mp4",
+    mobileFilename: "mobile_scene_1.mp4",
+  },
+  {
+    title: "Poderá abrir a música diretamente pelo Spotify para ouvir na íntegra",
+    desktopFilename: "scene_2.mp4",
+    mobileFilename: "mobile_scene_2.mp4",
+  },
+  {
+    title: "Precisará avaliar cada uma das músicas recomendadas",
+    desktopFilename: "scene_3.mp4",
+    mobileFilename: "mobile_scene_3.mp4",
+  },
+];
 
 function CompletionActionChooser({ onNavigate }) {
   const actions = [
@@ -176,6 +205,16 @@ export default function RecommendationResults() {
   const [languageImpactedTracks, setLanguageImpactedTracks] = useState({});
 
   const [evaluationSubmitted, setEvaluationSubmitted] = useState(false);
+  const [showRecommendationIntro, setShowRecommendationIntro] = useState(true);
+  const [useMobileTutorialVideos, setUseMobileTutorialVideos] = useState(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return false;
+
+    return window.matchMedia(MOBILE_RECOMMENDATION_TUTORIAL_MEDIA_QUERY).matches;
+  });
+
+  const errorRef = useRef(null);
+  const languageQuestionRef = useRef(null);
+  const recommendationListsRef = useRef(null);
 
   const ratingOptions = useMemo(() => {
     return ["", ...Array.from({ length: 11 }, (_, i) => String(i))];
@@ -197,6 +236,15 @@ export default function RecommendationResults() {
     );
   }, [displayedLists]);
 
+  const selectedRecommendationTutorialVideos = useMemo(() => {
+    return recommendationTutorialVideos.map((video) => ({
+      title: video.title,
+      src: getRecommendationTutorialVideoSrc(
+        useMobileTutorialVideos ? video.mobileFilename : video.desktopFilename
+      ),
+    }));
+  }, [useMobileTutorialVideos]);
+
   const getTrackKey = (track, index, listType = "") => {
     if (track?.id) {
       return `${listType}-${track.id}`;
@@ -217,6 +265,19 @@ export default function RecommendationResults() {
     return null;
   };
 
+  const scrollToElement = (element) => {
+    if (!element) return;
+
+    window.requestAnimationFrame(() => {
+      element.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  };
+
+  const showErrorAndScroll = (message) => {
+    setErrorMsg(message);
+    scrollToElement(errorRef.current);
+  };
+
   const handleLogout = () => {
     localStorage.clear();
     navigate("/login");
@@ -233,13 +294,65 @@ export default function RecommendationResults() {
     }));
   };
 
+  const allRatingsComplete = allDisplayedTracks.every((item) => {
+    const trackKey = getTrackKey(item.t, item.idx, item.listType);
+    const value = ratings[trackKey];
+    return value !== undefined && value !== "";
+  });
+
+  const hasLanguageImpactSelection =
+    languageHadImpact === false ||
+    (languageHadImpact === true &&
+      Object.values(languageImpactedTracks).some(Boolean));
+
+  const canSubmitEvaluation = showLanguageQuestion
+    ? allRatingsComplete && hasLanguageImpactSelection
+    : allRatingsComplete;
+
+  useLayoutEffect(() => {
+    if (showRecommendationIntro && typeof window !== "undefined") {
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    }
+  }, [showRecommendationIntro]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return undefined;
+
+    const mediaQuery = window.matchMedia(MOBILE_RECOMMENDATION_TUTORIAL_MEDIA_QUERY);
+    const updateTutorialVideoMode = (event) => {
+      setUseMobileTutorialVideos(event.matches);
+    };
+
+    setUseMobileTutorialVideos(mediaQuery.matches);
+
+    if (mediaQuery.addEventListener) {
+      mediaQuery.addEventListener("change", updateTutorialVideoMode);
+      return () => mediaQuery.removeEventListener("change", updateTutorialVideoMode);
+    }
+
+    mediaQuery.addListener(updateTutorialVideoMode);
+    return () => mediaQuery.removeListener(updateTutorialVideoMode);
+  }, []);
+
+  useEffect(() => {
+    if (errorMsg) {
+      scrollToElement(errorRef.current);
+    }
+  }, [errorMsg]);
+
+  useEffect(() => {
+    if (showLanguageQuestion) {
+      scrollToElement(languageQuestionRef.current);
+    }
+  }, [showLanguageQuestion]);
+
   const validateRatings = () => {
     for (const item of allDisplayedTracks) {
       const trackKey = getTrackKey(item.t, item.idx, item.listType);
       const value = ratings[trackKey];
 
       if (value === undefined || value === "") {
-        setErrorMsg("Preencha todas as notas (0 a 10) antes de prosseguir.");
+        showErrorAndScroll("Preencha todas as notas (0 a 10) antes de prosseguir.");
         return false;
       }
     }
@@ -254,11 +367,12 @@ export default function RecommendationResults() {
 
     if (!showLanguageQuestion) {
       setShowLanguageQuestion(true);
+      scrollToElement(languageQuestionRef.current);
       return;
     }
 
     if (languageHadImpact === null) {
-      setErrorMsg("Informe se o idioma da música influenciou negativamente sua avaliação.");
+      showErrorAndScroll("Informe se o idioma da música influenciou negativamente sua avaliação.");
       return;
     }
 
@@ -266,7 +380,7 @@ export default function RecommendationResults() {
       languageHadImpact === true &&
       !Object.values(languageImpactedTracks).some(Boolean)
     ) {
-      setErrorMsg("Selecione pelo menos uma música impactada pelo idioma.");
+      showErrorAndScroll("Selecione pelo menos uma música impactada pelo idioma.");
       return;
     }
 
@@ -365,7 +479,7 @@ export default function RecommendationResults() {
       console.error("Status:", err.response?.status);
       console.error("Resposta do backend:", err.response?.data);
       console.error(err);
-      setErrorMsg(
+      showErrorAndScroll(
         "Erro ao salvar a avaliação. Por favor, tente novamente mais tarde ou entre em contato com o Administrador."
       );
     }
@@ -373,6 +487,16 @@ export default function RecommendationResults() {
 
   const handleBackToRecommender = () => {
     navigate("/recommender");
+  };
+
+  const handleBackToRecommendationIntro = () => {
+    setShowRecommendationIntro(true);
+  };
+
+  const handleAdvanceToRecommendations = () => {
+    clientStartedAtRef.current = new Date().toISOString();
+    setShowRecommendationIntro(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const getSpotifyTrackUrl = (spotifyId) =>
@@ -406,7 +530,14 @@ export default function RecommendationResults() {
     const isEmbedOpen = openEmbedTrackKey === trackKey;
 
     return (
-      <li key={trackKey} className="recommender-result-item rating-item">
+      <li
+        key={trackKey}
+        className={`recommender-result-item rating-item ${
+          showLanguageQuestion && languageHadImpact === true
+            ? "language-impact-selectable"
+            : ""
+        }`}
+      >
         <div className="rating-track-info">
           <div
             className="track-label"
@@ -457,7 +588,7 @@ export default function RecommendationResults() {
         </div>
 
         {showLanguageQuestion && languageHadImpact === true && (
-          <label className="language-impact-checkbox">
+          <label className="language-impact-checkbox language-impact-checkbox-attention">
             <input
               type="checkbox"
               checked={Boolean(languageImpactedTracks[trackKey])}
@@ -595,6 +726,95 @@ export default function RecommendationResults() {
     );
   }
 
+  if (showRecommendationIntro) {
+    return (
+      <div className="home-wrapper">
+        <header className="home-header">
+          <div className="header-left">
+            <h2
+              className="site-title"
+              onClick={() => navigate("/")}
+              style={{ cursor: "pointer" }}
+            >
+              CB Music First Recommendation
+            </h2>
+          </div>
+
+          <div className="header-right">
+            <span className="welcome-text">Olá, {username}</span>
+            <button className="logout-button" onClick={handleLogout}>
+              Sair
+            </button>
+          </div>
+        </header>
+
+        <main className="form-container recommender-container recommendation-intro-container">
+          <h1 className="recommender-title">Na próxima página você:</h1>
+
+          <section
+            className="recommendation-intro-videos"
+            aria-label="Demonstração das ações disponíveis nas recomendações"
+          >
+            {selectedRecommendationTutorialVideos.map((video, index) => (
+              <article className="recommendation-intro-video-card" key={video.src}>
+                <h2 className="recommendation-intro-video-title">
+                  {index + 1}. {video.title}
+                </h2>
+
+                <video
+                  className="recommendation-intro-video"
+                  src={video.src}
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  preload="auto"
+                >
+                  Seu navegador não suporta a reprodução deste vídeo.
+                </video>
+              </article>
+            ))}
+          </section>
+
+          <div className="recommender-actions recommendation-intro-actions">
+            <button
+              className="form-button home-button recommender-back-button"
+              onClick={handleBackToRecommender}
+            >
+              Voltar
+            </button>
+
+            <button
+              className="form-button home-button recommender-submit-button"
+              onClick={handleAdvanceToRecommendations}
+            >
+              Avançar
+            </button>
+          </div>
+        </main>
+
+        <footer className="home-footer">
+          <div className="footer-content">
+            <p className="footer-text">
+              Projeto acadêmico desenvolvido para pesquisa em sistemas de recomendação musical baseados em conteúdo. Consulte as referências na aba 'Referências'.
+            </p>
+            <p className="footer-info">
+              © {new Date().getFullYear()} João Víctor Ferreira Araujo — Universidade de São Paulo (EACH-USP)
+            </p>
+            <a
+              className="footer-link"
+              href="https://github.com/joao-fa/ContentBased-Music-First-Recommendation"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Ver projeto no GitHub
+            </a>
+          </div>
+        </footer>
+      </div>
+    );
+  }
+
   return (
     <div className="home-wrapper">
       <header className="home-header">
@@ -688,6 +908,9 @@ export default function RecommendationResults() {
 
         {errorMsg && (
           <div
+            ref={errorRef}
+            tabIndex={-1}
+            className="recommendation-error-card"
             style={{
               marginTop: "1rem",
               padding: "0.75rem 1rem",
@@ -700,7 +923,7 @@ export default function RecommendationResults() {
           </div>
         )}
 
-        <div className="recommender-lists-grid">
+        <div className="recommender-lists-grid" ref={recommendationListsRef}>
           {displayedLists.map((listConfig) => (
             <section className="recommender-section" key={listConfig.displayLabel}>
               <h2 className="recommender-subtitle">{listConfig.displayLabel}</h2>
@@ -715,7 +938,7 @@ export default function RecommendationResults() {
         </div>
 
         {showLanguageQuestion && (
-          <section className="language-impact-card">
+          <section className="language-impact-card" ref={languageQuestionRef}>
             <h2 className="recommender-subtitle">
               O idioma da música influenciou negativamente sua avaliação?
             </h2>
@@ -726,7 +949,10 @@ export default function RecommendationResults() {
                   type="radio"
                   name="languageImpact"
                   checked={languageHadImpact === true}
-                  onChange={() => setLanguageHadImpact(true)}
+                  onChange={() => {
+                    setLanguageHadImpact(true);
+                    scrollToElement(recommendationListsRef.current);
+                  }}
                 />
                 Sim, influenciou uma ou mais avaliações
               </label>
@@ -756,14 +982,15 @@ export default function RecommendationResults() {
         <div className="recommender-actions">
           <button
             className="form-button home-button recommender-back-button"
-            onClick={handleBackToRecommender}
+            onClick={handleBackToRecommendationIntro}
           >
             Voltar
           </button>
 
           <button
-            className="form-button home-button recommender-submit-button"
+            className={`form-button home-button recommender-submit-button ${!canSubmitEvaluation ? "button-disabled-state" : ""}`}
             onClick={submitEvaluation}
+            aria-disabled={!canSubmitEvaluation}
           >
             {showLanguageQuestion ? "Confirmar e Salvar Avaliação" : "Submeter Avaliação"}
           </button>
