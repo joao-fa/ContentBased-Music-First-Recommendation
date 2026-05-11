@@ -2,6 +2,7 @@ import { useState } from "react";
 import { HelpCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import api from "../api";
+import LoadingText from "../components/LoadingText";
 import "../styles/Auth.css";
 
 export default function Register() {
@@ -173,7 +174,7 @@ export default function Register() {
           </label>
 
           <button type="submit" disabled={submitting}>
-            {submitting ? "Registrando..." : "Criar conta"}
+            {submitting ? <LoadingText label="Registrando" /> : "Criar conta"}
           </button>
         </form>
 
