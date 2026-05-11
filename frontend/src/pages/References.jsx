@@ -69,6 +69,16 @@ export default function References() {
       </header>
 
       <main className="form-container recommender-container references-container">
+        <div className="recommender-actions references-actions">
+          <button
+            type="button"
+            className="form-button home-button recommender-back-button"
+            onClick={() => navigate("/")}
+          >
+            Voltar
+          </button>
+        </div>
+
         <section className="references-hero">
           <div className="references-profile-card">
             <img
@@ -292,6 +302,16 @@ export default function References() {
             </ul>
           </article>
         </section>
+
+        <div className="recommender-actions references-actions">
+          <button
+            type="button"
+            className="form-button home-button recommender-back-button"
+            onClick={() => navigate("/")}
+          >
+            Voltar
+          </button>
+        </div>
       </main>
 
       <footer className="home-footer">

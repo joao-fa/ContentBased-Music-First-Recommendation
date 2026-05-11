@@ -604,7 +604,7 @@ export default function Recommender() {
         <h1 className="recommender-title">Nova Recomendação</h1>
 
         <p className="recommender-description">
-          Escolha um tipo de pesquisa.
+          Para gerar suas recomendações, precisamos escolher uma música de seu gosto. Primeiro, escolha um tipo de pesquisa.
         </p>
 
         <SearchTypeChooser
