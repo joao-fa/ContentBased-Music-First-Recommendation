@@ -1,5 +1,3 @@
-import argparse
-import base64
 import csv
 import json
 import os
@@ -89,14 +87,6 @@ MODEL_EXPORTS = {
 ALL_DATASETS = sorted([*EXPORT_DEFINITIONS.keys(), *MODEL_EXPORTS.keys()])
 RECURRING_DATASETS = ["recommendation_evaluations", "recommendation_batches"]
 STARTUP_DATASETS = ["tracks", "cluster_metadata"]
-GOOGLE_DRIVE_SCOPES = ["https://www.googleapis.com/auth/drive"]
-FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
-DEFAULT_RETENTION_BY_DATASET = {
-    "recommendation_evaluations": 24,
-    "recommendation_batches": 24,
-    "tracks": 3,
-    "cluster_metadata": 3,
-}
 TRUE_VALUES = {"1", "true", "yes", "y"}
 
 
@@ -131,15 +121,8 @@ def normalize_csv_value(value):
     return value
 
 
-def sanitize_drive_query_value(value):
-    return value.replace("\\", "\\\\").replace("'", "\\'")
-
-
 class Command(BaseCommand):
-    help = (
-        "Exporta snapshots do banco para CSV e, opcionalmente, envia os arquivos "
-        "para subpastas no Google Drive com política de retenção."
-    )
+    help = "Exporta snapshots do banco para arquivos CSV locais."
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -147,8 +130,8 @@ class Command(BaseCommand):
             choices=["recurring", "startup", "all"],
             default=os.getenv("EXPORT_DATABASE_PROFILE", "recurring"),
             help=(
-                "Perfil de exportação. 'recurring' é indicado para cron horário; "
-                "'startup' exporta músicas e metadados de clusters na inicialização."
+                "Perfil de exportação. 'recurring' exporta avaliações e lotes; "
+                "'startup' exporta músicas e metadados de clusters."
             ),
         )
         parser.add_argument(
@@ -197,39 +180,10 @@ class Command(BaseCommand):
             help="Pausa em segundos entre lotes para aliviar aplicação e banco.",
         )
         parser.add_argument(
-            "--skip-upload",
-            action="store_true",
-            default=env_bool("EXPORT_DATABASE_SKIP_UPLOAD", False),
-            help="Gera apenas os CSVs locais, sem enviar para o Google Drive.",
-        )
-        parser.add_argument(
-            "--keep-local",
-            action=argparse.BooleanOptionalAction,
-            default=env_bool("EXPORT_DATABASE_KEEP_LOCAL", False),
-            help=(
-                "Mantém os arquivos CSV locais depois do upload. "
-                "Use --keep-local para manter ou --no-keep-local para remover."
-            ),
-        )
-        parser.add_argument(
-            "--retention",
-            type=int,
-            help="Quantidade máxima de arquivos mantidos no Drive para todos os datasets.",
-        )
-        parser.add_argument(
             "--skip-lock",
             action="store_true",
             default=env_bool("EXPORT_DATABASE_SKIP_LOCK", False),
-            help=(
-                "Não usa advisory lock para evitar execuções concorrentes. "
-                "Não recomendado para cron."
-            ),
-        )
-        parser.add_argument(
-            "--skip-retention",
-            action="store_true",
-            default=env_bool("EXPORT_DATABASE_SKIP_RETENTION", False),
-            help="Não remove arquivos antigos após o upload.",
+            help="Não usa advisory lock para evitar execuções concorrentes.",
         )
 
     def handle(self, *args, **options):
@@ -252,10 +206,6 @@ class Command(BaseCommand):
     def export_selected_datasets(self, options):
         datasets = self.resolve_datasets(options["profile"], options["dataset"])
         timestamp = timezone.now().strftime("%Y%m%dT%H%M%SZ")
-        drive_client = None
-
-        if not options["skip_upload"]:
-            drive_client = GoogleDriveClient()
 
         for dataset in datasets:
             output_path = self.build_output_path(
@@ -276,37 +226,6 @@ class Command(BaseCommand):
                     f"[{dataset}] CSV gerado em: {output_path} ({row_count} linhas)"
                 )
             )
-
-            if options["skip_upload"]:
-                self.stdout.write(
-                    self.style.WARNING(f"[{dataset}] Upload ignorado por configuração.")
-                )
-                continue
-
-            dataset_folder_id = drive_client.ensure_dataset_folder(dataset)
-            file_id = drive_client.upload_csv(output_path, dataset_folder_id)
-            self.stdout.write(
-                self.style.SUCCESS(
-                    f"[{dataset}] Upload concluído no Google Drive. file_id={file_id}"
-                )
-            )
-
-            if not options["skip_retention"]:
-                retention_limit = self.get_retention_limit(dataset, options["retention"])
-                deleted_count = drive_client.enforce_retention(
-                    dataset_folder_id,
-                    retention_limit,
-                )
-                self.stdout.write(
-                    self.style.SUCCESS(
-                        f"[{dataset}] Retenção aplicada: limite={retention_limit}, "
-                        f"removidos={deleted_count}"
-                    )
-                )
-
-            if not options["keep_local"]:
-                output_path.unlink(missing_ok=True)
-
 
     def acquire_export_lock(self, database_alias):
         connection = connections[database_alias]
@@ -345,9 +264,6 @@ class Command(BaseCommand):
 
         if options["filename"] and not options["dataset"]:
             raise CommandError("--filename exige o uso de --dataset para evitar colisões.")
-
-        if options["retention"] is not None and options["retention"] < 1:
-            raise CommandError("--retention deve ser maior que zero.")
 
         if options["database"] not in settings.DATABASES:
             raise CommandError(f"Alias de banco não configurado: {options['database']}")
@@ -416,156 +332,3 @@ class Command(BaseCommand):
         model = apps.get_model(app_label, model_name)
         fields = [(field.name, field.name) for field in model._meta.fields]
         return model.objects.using(database_alias).order_by(model._meta.pk.name), fields
-
-    def get_retention_limit(self, dataset, override):
-        if override is not None:
-            return override
-
-        env_name = f"EXPORT_DATABASE_RETENTION_{dataset.upper()}"
-        return env_int(env_name, DEFAULT_RETENTION_BY_DATASET[dataset])
-
-
-class GoogleDriveClient:
-    def __init__(self):
-        from google.oauth2 import service_account
-        from googleapiclient.discovery import build
-
-        self.root_folder_id = os.getenv("GOOGLE_DRIVE_FOLDER_ID")
-        credentials = self.get_google_drive_credentials(service_account)
-        self.service = build("drive", "v3", credentials=credentials)
-
-    def ensure_dataset_folder(self, dataset):
-        folder_id = self.find_folder(dataset)
-
-        if folder_id:
-            return folder_id
-
-        metadata = {"name": dataset, "mimeType": FOLDER_MIME_TYPE}
-        if self.root_folder_id:
-            metadata["parents"] = [self.root_folder_id]
-
-        created_folder = (
-            self.service.files()
-            .create(body=metadata, fields="id", supportsAllDrives=True)
-            .execute()
-        )
-        return created_folder["id"]
-
-    def find_folder(self, name):
-        escaped_name = sanitize_drive_query_value(name)
-        query_parts = [
-            f"name = '{escaped_name}'",
-            f"mimeType = '{FOLDER_MIME_TYPE}'",
-            "trashed = false",
-        ]
-
-        if self.root_folder_id:
-            query_parts.append(f"'{self.root_folder_id}' in parents")
-
-        response = (
-            self.service.files()
-            .list(
-                q=" and ".join(query_parts),
-                fields="files(id, name)",
-                pageSize=1,
-                includeItemsFromAllDrives=True,
-                supportsAllDrives=True,
-            )
-            .execute()
-        )
-        files = response.get("files", [])
-        return files[0]["id"] if files else None
-
-    def upload_csv(self, output_path, folder_id):
-        from googleapiclient.http import MediaFileUpload
-
-        media = MediaFileUpload(str(output_path), mimetype="text/csv", resumable=True)
-        metadata = {"name": output_path.name, "mimeType": "text/csv"}
-
-        if folder_id:
-            metadata["parents"] = [folder_id]
-
-        created_file = (
-            self.service.files()
-            .create(
-                body=metadata,
-                media_body=media,
-                fields="id",
-                supportsAllDrives=True,
-            )
-            .execute()
-        )
-        return created_file["id"]
-
-    def enforce_retention(self, folder_id, retention_limit):
-        files = self.list_csv_files(folder_id)
-        expired_files = files[retention_limit:]
-
-        for expired_file in expired_files:
-            self.service.files().delete(
-                fileId=expired_file["id"],
-                supportsAllDrives=True,
-            ).execute()
-
-        return len(expired_files)
-
-    def list_csv_files(self, folder_id):
-        query_parts = ["mimeType = 'text/csv'", "trashed = false"]
-
-        if folder_id:
-            query_parts.append(f"'{folder_id}' in parents")
-
-        files = []
-        page_token = None
-
-        while True:
-            response = (
-                self.service.files()
-                .list(
-                    q=" and ".join(query_parts),
-                    fields="nextPageToken, files(id, name, createdTime)",
-                    orderBy="createdTime desc",
-                    pageSize=1000,
-                    pageToken=page_token,
-                    includeItemsFromAllDrives=True,
-                    supportsAllDrives=True,
-                )
-                .execute()
-            )
-            files.extend(response.get("files", []))
-            page_token = response.get("nextPageToken")
-
-            if not page_token:
-                return files
-
-    def get_google_drive_credentials(self, service_account):
-        encoded_json = os.getenv("GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_BASE64")
-        raw_json = os.getenv("GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON")
-        credentials_file = os.getenv("GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE")
-
-        if encoded_json:
-            service_account_info = json.loads(
-                base64.b64decode(encoded_json).decode("utf-8")
-            )
-            return service_account.Credentials.from_service_account_info(
-                service_account_info,
-                scopes=GOOGLE_DRIVE_SCOPES,
-            )
-
-        if raw_json:
-            return service_account.Credentials.from_service_account_info(
-                json.loads(raw_json),
-                scopes=GOOGLE_DRIVE_SCOPES,
-            )
-
-        if credentials_file:
-            return service_account.Credentials.from_service_account_file(
-                credentials_file,
-                scopes=GOOGLE_DRIVE_SCOPES,
-            )
-
-        raise CommandError(
-            "Configure GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_BASE64, "
-            "GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON ou GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE "
-            "para habilitar o upload no Google Drive."
-        )
