@@ -107,16 +107,6 @@ export default function MyRecommendations() {
           Visualize as músicas base que você selecionou e as recomendações avaliadas.
         </p>
 
-        <div className="recommender-actions my-recommendations-actions">
-          <button
-            type="button"
-            className="form-button home-button recommender-back-button"
-            onClick={() => navigate("/")}
-          >
-            Voltar
-          </button>
-        </div>
-
         {loading && (
           <p className="recommender-empty">
             <LoadingText label="Carregando recomendações" />
