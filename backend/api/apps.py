@@ -2,9 +2,15 @@ import os
 import sys
 import time
 import threading
+
 from django.apps import AppConfig
 from django.core.management import call_command
-from django.db import connections, DEFAULT_DB_ALIAS, OperationalError, ProgrammingError
+from django.db import (
+    connections,
+    DEFAULT_DB_ALIAS,
+    OperationalError,
+    ProgrammingError,
+)
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 
@@ -27,7 +33,9 @@ class ApiConfig(AppConfig):
             "loaddata",
             "dumpdata",
             "tracks_database_initialization",
+            "evaluate_clustering",
         }
+
         if any(cmd in sys.argv for cmd in skip_cmds):
             return
 
@@ -50,6 +58,7 @@ class ApiConfig(AppConfig):
         def bootstrap():
             max_wait = 30
             waited = 0
+
             while waited < max_wait:
                 try:
                     connections[DEFAULT_DB_ALIAS].cursor()
@@ -65,11 +74,13 @@ class ApiConfig(AppConfig):
             try:
                 executor = MigrationExecutor(connections[DEFAULT_DB_ALIAS])
                 plan = executor.migration_plan(executor.loader.graph.leaf_nodes())
+
                 if plan:
                     logger.warning(
                         "[BOOTSTRAP] Migrações pendentes detectadas — pulando bootstrap."
                     )
                     return
+
             except Exception as e:
                 logger.error(f"[BOOTSTRAP] Falha ao verificar migrações: {e}")
                 return
@@ -79,6 +90,7 @@ class ApiConfig(AppConfig):
                 return
 
             got_lock = True
+
             try:
                 if connection.vendor == "postgresql":
                     with connection.cursor() as cur:
@@ -87,6 +99,7 @@ class ApiConfig(AppConfig):
                             ["bootstrap_tracks_v1"],
                         )
                         got_lock = bool(cur.fetchone()[0])
+
             except Exception as e:
                 logger.warning(f"[BOOTSTRAP] Falha ao obter advisory lock: {e}")
 
@@ -97,29 +110,37 @@ class ApiConfig(AppConfig):
                 return
 
             retries = 3
-            for attempt in range(1, retries + 1):
-                try:
-                    logger.info("[BOOTSTRAP] Iniciando tracks_database_initialization...")
-                    call_command("tracks_database_initialization")
-                    logger.info("[BOOTSTRAP] Concluído com sucesso.")
-                    break
-                except (OperationalError, ProgrammingError) as e:
-                    logger.error(
-                        f"[BOOTSTRAP] Erro de DB (tentativa {attempt}/{retries}): {e}"
-                    )
-                    time.sleep(3 * attempt)
-                except Exception as e:
-                    logger.error(f"[BOOTSTRAP] Erro ao inicializar o banco de faixas: {e}")
-                    break
+
             try:
-                if connection.vendor == "postgresql":
-                    with connection.cursor() as cur:
-                        cur.execute(
-                            "SELECT pg_advisory_unlock( hashtext(%s) );",
-                            ["bootstrap_tracks_v1"],
+                for attempt in range(1, retries + 1):
+                    try:
+                        logger.info("[BOOTSTRAP] Iniciando tracks_database_initialization...")
+                        call_command("tracks_database_initialization")
+                        logger.info("[BOOTSTRAP] Concluído com sucesso.")
+                        break
+
+                    except (OperationalError, ProgrammingError) as e:
+                        logger.error(
+                            f"[BOOTSTRAP] Erro de DB (tentativa {attempt}/{retries}): {e}"
                         )
-            except Exception:
-                pass
+                        time.sleep(3 * attempt)
+
+                    except Exception as e:
+                        logger.error(
+                            f"[BOOTSTRAP] Erro ao inicializar o banco de faixas: {e}"
+                        )
+                        break
+
+            finally:
+                try:
+                    if connection.vendor == "postgresql":
+                        with connection.cursor() as cur:
+                            cur.execute(
+                                "SELECT pg_advisory_unlock( hashtext(%s) );",
+                                ["bootstrap_tracks_v1"],
+                            )
+                except Exception:
+                    pass
 
         logger.info("[BOOTSTRAP] Thread de bootstrap criada.")
         t = threading.Thread(target=bootstrap, daemon=True)
