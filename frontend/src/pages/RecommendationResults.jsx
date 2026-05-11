@@ -445,6 +445,11 @@ export default function RecommendationResults() {
     navigate("/recommender");
   };
 
+  const handleBackToRecommendationIntro = () => {
+    setShowRecommendationIntro(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const handleAdvanceToRecommendations = () => {
     clientStartedAtRef.current = new Date().toISOString();
     setShowRecommendationIntro(false);
@@ -716,10 +721,11 @@ export default function RecommendationResults() {
                 <video
                   className="recommendation-intro-video"
                   src={video.src}
-                  controls
+                  autoPlay
+                  loop
                   muted
                   playsInline
-                  preload="metadata"
+                  preload="auto"
                 >
                   Seu navegador não suporta a reprodução deste vídeo.
                 </video>
@@ -933,7 +939,7 @@ export default function RecommendationResults() {
         <div className="recommender-actions">
           <button
             className="form-button home-button recommender-back-button"
-            onClick={handleBackToRecommender}
+            onClick={handleBackToRecommendationIntro}
           >
             Voltar
           </button>
