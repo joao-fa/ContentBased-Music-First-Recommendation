@@ -14,6 +14,30 @@ const RANDOM_LIST_TYPE = "randomList";
 const GREATEST_VARIATION_LIST_TYPE = "greatestVariationList";
 const FURTHEST_FROM_THE_MEDIAN_LIST_TYPE = "furthestFromTheMedianList";
 
+const recommendationTutorialVideoModules = import.meta.glob(
+  "../assets/recommender/scene_*.mp4",
+  { eager: true, query: "?url", import: "default" }
+);
+
+const getRecommendationTutorialVideoSrc = (filename) =>
+  recommendationTutorialVideoModules[`../assets/recommender/${filename}`] ??
+  `/src/assets/recommender/${filename}`;
+
+const recommendationTutorialVideos = [
+  {
+    title: "Poderá ouvir uma prévia da música recomendada",
+    src: getRecommendationTutorialVideoSrc("scene_1.mp4"),
+  },
+  {
+    title: "Poderá abrir a música diretamente pelo Spotify para ouvir na íntegra",
+    src: getRecommendationTutorialVideoSrc("scene_2.mp4"),
+  },
+  {
+    title: "Precisará avaliar cada uma das músicas recomendadas",
+    src: getRecommendationTutorialVideoSrc("scene_3.mp4"),
+  },
+];
+
 function CompletionActionChooser({ onNavigate }) {
   const actions = [
     {
@@ -176,6 +200,7 @@ export default function RecommendationResults() {
   const [languageImpactedTracks, setLanguageImpactedTracks] = useState({});
 
   const [evaluationSubmitted, setEvaluationSubmitted] = useState(false);
+  const [showRecommendationIntro, setShowRecommendationIntro] = useState(true);
 
   const errorRef = useRef(null);
   const languageQuestionRef = useRef(null);
@@ -420,6 +445,12 @@ export default function RecommendationResults() {
     navigate("/recommender");
   };
 
+  const handleAdvanceToRecommendations = () => {
+    clientStartedAtRef.current = new Date().toISOString();
+    setShowRecommendationIntro(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const getSpotifyTrackUrl = (spotifyId) =>
     `https://open.spotify.com/track/${spotifyId}`;
 
@@ -643,6 +674,94 @@ export default function RecommendationResults() {
             Ir para Nova Recomendação
           </button>
         </main>
+      </div>
+    );
+  }
+
+  if (showRecommendationIntro) {
+    return (
+      <div className="home-wrapper">
+        <header className="home-header">
+          <div className="header-left">
+            <h2
+              className="site-title"
+              onClick={() => navigate("/")}
+              style={{ cursor: "pointer" }}
+            >
+              CB Music First Recommendation
+            </h2>
+          </div>
+
+          <div className="header-right">
+            <span className="welcome-text">Olá, {username}</span>
+            <button className="logout-button" onClick={handleLogout}>
+              Sair
+            </button>
+          </div>
+        </header>
+
+        <main className="form-container recommender-container recommendation-intro-container">
+          <h1 className="recommender-title">Na próxima página você:</h1>
+
+          <section
+            className="recommendation-intro-videos"
+            aria-label="Demonstração das ações disponíveis nas recomendações"
+          >
+            {recommendationTutorialVideos.map((video, index) => (
+              <article className="recommendation-intro-video-card" key={video.src}>
+                <h2 className="recommendation-intro-video-title">
+                  {index + 1}. {video.title}
+                </h2>
+
+                <video
+                  className="recommendation-intro-video"
+                  src={video.src}
+                  controls
+                  muted
+                  playsInline
+                  preload="metadata"
+                >
+                  Seu navegador não suporta a reprodução deste vídeo.
+                </video>
+              </article>
+            ))}
+          </section>
+
+          <div className="recommender-actions recommendation-intro-actions">
+            <button
+              className="form-button home-button recommender-back-button"
+              onClick={handleBackToRecommender}
+            >
+              Voltar
+            </button>
+
+            <button
+              className="form-button home-button recommender-submit-button"
+              onClick={handleAdvanceToRecommendations}
+            >
+              Avançar
+            </button>
+          </div>
+        </main>
+
+        <footer className="home-footer">
+          <div className="footer-content">
+            <p className="footer-text">
+              Projeto acadêmico desenvolvido para pesquisa em sistemas de recomendação musical baseados em conteúdo. Consulte as referências na aba 'Referências'.
+            </p>
+            <p className="footer-info">
+              © {new Date().getFullYear()} João Víctor Ferreira Araujo — Universidade de São Paulo (EACH-USP)
+            </p>
+            <a
+              className="footer-link"
+              href="https://github.com/joao-fa/ContentBased-Music-First-Recommendation"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Ver projeto no GitHub
+            </a>
+          </div>
+        </footer>
       </div>
     );
   }
