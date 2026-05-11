@@ -196,6 +196,7 @@ export default function Recommender() {
   const [artistSelectedTrack, setArtistSelectedTrack] = useState(null);
 
   const errorRef = useRef(null);
+  const searchInputRef = useRef(null);
   const trackSelectionRef = useRef(null);
   const artistTracksSectionRef = useRef(null);
   const artistTrackSelectionRef = useRef(null);
@@ -254,6 +255,12 @@ export default function Recommender() {
       scrollToElement(errorRef.current);
     }
   }, [errorMsg]);
+
+  useEffect(() => {
+    if (searchType) {
+      scrollToElement(searchInputRef.current);
+    }
+  }, [searchType]);
 
   const handleSearchTypeChange = (value) => {
     if (value === searchType) return;
@@ -657,6 +664,7 @@ export default function Recommender() {
                       placeholder="Digite o nome da música..."
                       value={query}
                       onChange={(e) => setQuery(e.target.value)}
+                      ref={searchInputRef}
                       className="recommender-input"
                       autoComplete="off"
                     />
@@ -738,6 +746,7 @@ export default function Recommender() {
                         placeholder="Digite o nome do artista ou banda..."
                         value={artistQuery}
                         onChange={(e) => setArtistQuery(e.target.value)}
+                        ref={searchInputRef}
                         className="recommender-input"
                         autoComplete="off"
                       />
