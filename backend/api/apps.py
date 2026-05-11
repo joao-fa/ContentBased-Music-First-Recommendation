@@ -27,8 +27,6 @@ class ApiConfig(AppConfig):
             "loaddata",
             "dumpdata",
             "tracks_database_initialization",
-            "export_database_to_drive",
-            "crontab",
         }
         if any(cmd in sys.argv for cmd in skip_cmds):
             return
@@ -48,48 +46,6 @@ class ApiConfig(AppConfig):
 
         def bootstrap_enabled():
             return env_enabled("BOOTSTRAP_DB", "true")
-
-        def startup_snapshots_enabled():
-            return env_enabled("EXPORT_DATABASE_STARTUP_ENABLED", "true")
-
-        def run_startup_snapshots():
-            if not startup_snapshots_enabled():
-                return
-
-            got_snapshot_lock = True
-            try:
-                if connection.vendor == "postgresql":
-                    with connection.cursor() as cur:
-                        cur.execute(
-                            "SELECT pg_try_advisory_lock( hashtext(%s) );",
-                            ["database_startup_snapshots_v1"],
-                        )
-                        got_snapshot_lock = bool(cur.fetchone()[0])
-            except Exception as e:
-                logger.warning(f"[BACKUP] Falha ao obter advisory lock: {e}")
-
-            if not got_snapshot_lock:
-                logger.info(
-                    "[BACKUP] Outro processo já está gerando snapshots de startup."
-                )
-                return
-
-            try:
-                logger.info("[BACKUP] Iniciando snapshots de startup...")
-                call_command("export_database_to_drive", profile="startup")
-                logger.info("[BACKUP] Snapshots de startup concluídos.")
-            except Exception as e:
-                logger.error(f"[BACKUP] Erro ao gerar snapshots de startup: {e}")
-            finally:
-                try:
-                    if connection.vendor == "postgresql":
-                        with connection.cursor() as cur:
-                            cur.execute(
-                                "SELECT pg_advisory_unlock( hashtext(%s) );",
-                                ["database_startup_snapshots_v1"],
-                            )
-                except Exception:
-                    pass
 
         def bootstrap():
             max_wait = 30
@@ -119,11 +75,7 @@ class ApiConfig(AppConfig):
                 return
 
             if not bootstrap_enabled():
-                logger.info(
-                    "[BOOTSTRAP] BOOTSTRAP_DB desabilitado; "
-                    "executando apenas snapshots de startup."
-                )
-                run_startup_snapshots()
+                logger.info("[BOOTSTRAP] BOOTSTRAP_DB desabilitado; bootstrap ignorado.")
                 return
 
             got_lock = True
@@ -150,7 +102,6 @@ class ApiConfig(AppConfig):
                     logger.info("[BOOTSTRAP] Iniciando tracks_database_initialization...")
                     call_command("tracks_database_initialization")
                     logger.info("[BOOTSTRAP] Concluído com sucesso.")
-                    run_startup_snapshots()
                     break
                 except (OperationalError, ProgrammingError) as e:
                     logger.error(

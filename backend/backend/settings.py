@@ -70,7 +70,6 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "django_crontab",
     "api",
     "rest_framework",
     "corsheaders",
@@ -176,16 +175,3 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
-
-# Database CSV snapshots
-# Use `python manage.py crontab add` in environments that support system cron.
-# The default schedule creates recommendation snapshots hourly.
-if env_bool("EXPORT_DATABASE_CRON_ENABLED", True):
-    CRONJOBS = [
-        (
-            os.getenv("EXPORT_DATABASE_CRON_SCHEDULE", "0 * * * *"),
-            "api.cron.export_recurring_database_snapshots",
-        ),
-    ]
-else:
-    CRONJOBS = []
