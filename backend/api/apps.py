@@ -34,6 +34,7 @@ class ApiConfig(AppConfig):
             "dumpdata",
             "tracks_database_initialization",
             "evaluate_clustering",
+            "export_database_to_drive",
         }
 
         if any(cmd in sys.argv for cmd in skip_cmds):
@@ -54,6 +55,10 @@ class ApiConfig(AppConfig):
 
         def bootstrap_enabled():
             return env_enabled("BOOTSTRAP_DB", "true")
+
+        if not bootstrap_enabled():
+            logger.info("[BOOTSTRAP] BOOTSTRAP_DB desabilitado; bootstrap ignorado.")
+            return
 
         def bootstrap():
             max_wait = 30
@@ -83,10 +88,6 @@ class ApiConfig(AppConfig):
 
             except Exception as e:
                 logger.error(f"[BOOTSTRAP] Falha ao verificar migrações: {e}")
-                return
-
-            if not bootstrap_enabled():
-                logger.info("[BOOTSTRAP] BOOTSTRAP_DB desabilitado; bootstrap ignorado.")
                 return
 
             got_lock = True
