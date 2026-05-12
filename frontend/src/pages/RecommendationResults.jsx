@@ -839,72 +839,30 @@ export default function RecommendationResults() {
       <main className="form-container recommender-container">
         <h1 className="recommender-title">Avalie as Recomendações de acordo com seu gosto</h1>
 
-        <p className="recommender-subtitle" style={{ marginTop: "0.5rem" }}>
-          Recomendações geradas para{" "}
-          <strong>{selected_track?.name || "a música selecionada"}</strong>
-        </p>
+        <div className="recommendation-results-intro-row">
+          <p className="recommender-subtitle recommendation-results-target">
+            Recomendações geradas para{" "}
+            <strong>{selected_track?.name || "a música selecionada"}</strong>
+          </p>
 
-        <div
-          className="recommender-subtitle"
-          style={{
-            marginTop: "0.75rem",
-            display: "flex",
-            alignItems: "center",
-            gap: "6px",
-            position: "relative",
-            width: "fit-content",
-          }}
-        >
-          <strong>Dúvidas sobre como avaliar? </strong>
-
-          <span
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              cursor: "help",
-              position: "relative",
-            }}
-            className="evaluation-help-tooltip-wrapper"
-          >
-            <HelpCircle size={17} />
+          <div className="recommender-database-help recommendation-evaluation-help">
+            <span>Dúvidas sobre como avaliar?</span>
 
             <span
-              className="evaluation-help-tooltip"
-              style={{
-                position: "absolute",
-                left: "24px",
-                top: "50%",
-                transform: "translateY(-50%)",
-                width: "260px",
-                padding: "10px 12px",
-                borderRadius: "8px",
-                background: "#111827",
-                color: "#ffffff",
-                fontSize: "12px",
-                lineHeight: "1.4",
-                fontWeight: 400,
-                opacity: 0,
-                visibility: "hidden",
-                transition: "opacity 0.15s ease-in-out",
-                zIndex: 20,
-                boxShadow: "0 6px 18px rgba(0, 0, 0, 0.22)",
-              }}
+              className="recommender-database-tooltip-wrapper"
+              tabIndex={0}
+              aria-label="Informações sobre como avaliar recomendações"
             >
-              Avalie de forma simples: notas maiores indicam que você gostou mais da
-              música recomendada. Use notas menores quando a música não combinar com
-              sua preferência.
-            </span>
-          </span>
-        </div>
+              <HelpCircle size={17} />
 
-        <style>
-          {`
-            .evaluation-help-tooltip-wrapper:hover .evaluation-help-tooltip {
-              opacity: 1 !important;
-              visibility: visible !important;
-            }
-          `}
-        </style>
+              <span className="recommender-database-tooltip recommendation-evaluation-tooltip">
+                Avalie de forma simples: notas maiores indicam que você gostou mais da
+                música recomendada. Use notas menores quando a música não combinar com
+                sua preferência.
+              </span>
+            </span>
+          </div>
+        </div>
 
         {errorMsg && (
           <div
@@ -936,6 +894,11 @@ export default function RecommendationResults() {
             </section>
           ))}
         </div>
+
+        <p className="recommendation-honesty-note">
+          Por favor, seja honesta(o).{" "}
+          <strong>Avaliações negativas ou positivas colaboram igualmente para o projeto.</strong>
+        </p>
 
         {showLanguageQuestion && (
           <section className="language-impact-card" ref={languageQuestionRef}>
