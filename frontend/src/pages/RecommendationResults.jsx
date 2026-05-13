@@ -119,6 +119,9 @@ export default function RecommendationResults() {
     variable_based_list,
     variable_based_strategy,
     used_feature,
+    primary_metric,
+    secondary_metric,
+    used_features,
     reference_feature_value,
     reference_feature_median,
     reference_feature_std_deviation,
@@ -131,6 +134,9 @@ export default function RecommendationResults() {
     variable_based_strategy === FURTHEST_FROM_THE_MEDIAN_LIST_TYPE
       ? FURTHEST_FROM_THE_MEDIAN_LIST_TYPE
       : GREATEST_VARIATION_LIST_TYPE;
+
+  const primaryMetric = primary_metric ?? used_features?.[0]?.feature ?? used_feature ?? null;
+  const secondaryMetric = secondary_metric ?? used_features?.[1]?.feature ?? null;
 
   const createSessionUuid = () => {
     if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -398,7 +404,9 @@ export default function RecommendationResults() {
         client_submitted_at: clientSubmittedAt.toISOString(),
         duration_seconds: durationSeconds,
         experiment_config: {
-          used_feature: used_feature ?? null,
+          used_features: used_features ?? [],
+          primary_metric: primaryMetric,
+          secondary_metric: secondaryMetric,
           reference_feature_value: reference_feature_value ?? null,
           reference_feature_median: reference_feature_median ?? null,
           reference_feature_std_deviation: reference_feature_std_deviation ?? null,
@@ -412,7 +420,8 @@ export default function RecommendationResults() {
         },
 
         base_track_id: selected_track?.id,
-        used_feature: used_feature ?? null,
+        primary_metric: primaryMetric,
+        secondary_metric: secondaryMetric,
 
         base_track_name: selected_track?.name ?? "",
         base_track_artists: selected_track?.artists ?? "",
@@ -430,7 +439,8 @@ export default function RecommendationResults() {
               language_influenced_rating:
                 languageHadImpact === true &&
                 Boolean(languageImpactedTracks[trackKey]),
-              base_metric: null,
+              primary_metric: null,
+              secondary_metric: null,
               recommendation_cluster: track.cluster ?? null,
               base_track_feature_value: null,
               recommended_track_feature_value: null,
@@ -452,11 +462,12 @@ export default function RecommendationResults() {
               language_influenced_rating:
                 languageHadImpact === true &&
                 Boolean(languageImpactedTracks[trackKey]),
-              base_metric: used_feature ?? null,
+              primary_metric: primaryMetric,
+              secondary_metric: secondaryMetric,
               recommendation_cluster: track.cluster ?? null,
               base_track_feature_value:
-                reference_feature_value ?? getFeatureValue(selected_track, used_feature),
-              recommended_track_feature_value: getFeatureValue(track, used_feature),
+                reference_feature_value ?? getFeatureValue(selected_track, primaryMetric),
+              recommended_track_feature_value: getFeatureValue(track, primaryMetric),
               was_preview_opened: Boolean(previewOpenedTracks[trackKey]),
               spotify_opened: Boolean(spotifyOpenedTracks[trackKey]),
               recommended_track_name: track.name ?? "",
