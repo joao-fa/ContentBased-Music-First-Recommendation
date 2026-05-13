@@ -404,7 +404,6 @@ export default function RecommendationResults() {
         client_submitted_at: clientSubmittedAt.toISOString(),
         duration_seconds: durationSeconds,
         experiment_config: {
-          used_feature: used_feature ?? null,
           used_features: used_features ?? [],
           primary_metric: primaryMetric,
           secondary_metric: secondaryMetric,
@@ -421,7 +420,6 @@ export default function RecommendationResults() {
         },
 
         base_track_id: selected_track?.id,
-        used_feature: used_feature ?? null,
         primary_metric: primaryMetric,
         secondary_metric: secondaryMetric,
 

@@ -75,8 +75,6 @@ class RecommendationBatch(models.Model):
     base_track_artists = models.TextField(blank=True, default="")
     recommendation_cluster = models.IntegerField(null=True, blank=True)
 
-    used_feature = models.CharField(max_length=100, null=True, blank=True)
-
     strategy_version = models.CharField(
         max_length=50,
         blank=True,

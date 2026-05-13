@@ -580,8 +580,7 @@ class RecommendationEvaluationSubmitView(generics.GenericAPIView):
 
         base_track = Track.objects.get(id=data["base_track_id"])
 
-        used_feature = data.get("used_feature") or None
-        primary_metric = self._feature_name_or_none(data.get("primary_metric") or used_feature)
+        primary_metric = self._feature_name_or_none(data.get("primary_metric"))
         secondary_metric = self._feature_name_or_none(data.get("secondary_metric"))
         strategy_version = data.get("strategy_version") or os.getenv("STRATEGY_VERSION")
         dataset_version = data.get("dataset_version") or os.getenv("DATASET_NAME")
@@ -598,7 +597,6 @@ class RecommendationEvaluationSubmitView(generics.GenericAPIView):
             "base_track_name": base_track_name,
             "base_track_artists": base_track_artists,
             "recommendation_cluster": batch_recommendation_cluster,
-            "used_feature": used_feature,
             "strategy_version": strategy_version,
             "dataset_version": dataset_version,
             "cluster_algorithm": cluster_algorithm,

@@ -67,7 +67,6 @@ EXPORT_DEFINITIONS = {
             ("base_track_name", "base_track_name"),
             ("base_track_artists", "base_track_artists"),
             ("recommendation_cluster", "recommendation_cluster"),
-            ("used_feature", "used_feature"),
             ("strategy_version", "strategy_version"),
             ("dataset_version", "dataset_version"),
             ("cluster_algorithm", "cluster_algorithm"),

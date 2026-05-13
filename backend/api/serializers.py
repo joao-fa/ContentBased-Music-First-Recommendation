@@ -77,7 +77,6 @@ class RecommendationEvaluationItemSerializer(serializers.Serializer):
 
 class RecommendationEvaluationSubmitSerializer(serializers.Serializer):
     base_track_id = serializers.CharField()
-    used_feature = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     primary_metric = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     secondary_metric = serializers.CharField(required=False, allow_null=True, allow_blank=True)
 
@@ -173,7 +172,6 @@ class MyRecommendationBatchSerializer(serializers.ModelSerializer):
             "base_track_name",
             "base_track_artists",
             "recommendation_cluster",
-            "used_feature",
             "client_started_at",
             "client_submitted_at",
             "duration_seconds",
