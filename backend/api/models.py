@@ -146,7 +146,8 @@ class RecommendationEvaluation(models.Model):
 
     language_influenced_rating = models.BooleanField(default=False)
 
-    base_metric = models.CharField(max_length=100, null=True, blank=True)
+    primary_metric = models.CharField(max_length=100, null=True, blank=True)
+    secondary_metric = models.CharField(max_length=100, null=True, blank=True)
     recommendation_cluster = models.IntegerField(null=True, blank=True)
 
     base_track_cluster_at_recommendation = models.IntegerField(null=True, blank=True)

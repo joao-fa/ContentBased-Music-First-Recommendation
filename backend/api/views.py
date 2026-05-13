@@ -44,6 +44,10 @@ VARIABLE_BASED_LIST_TYPES = {
     FURTHEST_FROM_THE_MEDIAN_LIST_TYPE,
 }
 
+PRIMARY_FEATURE_WEIGHT = 0.6666
+SECONDARY_FEATURE_WEIGHT = 0.3334
+MAX_WEIGHTED_FEATURES = 2
+
 
 # ======================================================
 # HEALTHCHECKS E PRONTIDÃO DA API
@@ -242,15 +246,15 @@ class RecommendationView(generics.GenericAPIView):
 
     Retorna duas listas:
     - random_list: faixas aleatórias do mesmo cluster da faixa base
-    - variable_based_list: faixas do mesmo cluster mais próximas na feature
-      definida pela estratégia sorteada ou informada.
+    - variable_based_list: faixas do mesmo cluster mais próximas na combinação
+      ponderada das features definidas pela estratégia sorteada ou informada.
 
     Estratégias disponíveis:
     - greatestVariationList:
-      escolhe a feature de maior desvio-padrão dentro do cluster.
+      escolhe as duas features de maior desvio-padrão dentro do cluster.
     - furthestFromTheMedianList:
-      escolhe a feature em que a faixa base está mais distante da mediana
-      do cluster, usando distância padronizada por desvio-padrão.
+      escolhe as duas features em que a faixa base está mais distante da
+      mediana do cluster, usando distância padronizada por desvio-padrão.
     """
     permission_classes = [IsAuthenticated]
     serializer_class = InputTrackSerializer
@@ -300,35 +304,76 @@ class RecommendationView(generics.GenericAPIView):
 
         return snapshot
 
-    def _select_greatest_variation_feature(self, ref_track, metas):
-        valid_metas = [
-            meta for meta in metas
-            if meta.std_deviation is not None
-        ]
-        valid_metas.sort(
-            key=lambda meta: float(meta.std_deviation),
-            reverse=True
+    def _build_feature_selection_payload(self, candidates):
+        selected_candidates = candidates[:MAX_WEIGHTED_FEATURES]
+        if not selected_candidates:
+            return None
+
+        weights = (
+            [PRIMARY_FEATURE_WEIGHT, SECONDARY_FEATURE_WEIGHT]
+            if len(selected_candidates) > 1
+            else [1.0]
         )
 
-        for meta in valid_metas:
+        weighted_features = []
+        for candidate, weight in zip(selected_candidates, weights):
+            weighted_candidate = candidate.copy()
+            weighted_candidate["weight"] = weight
+            weighted_features.append(weighted_candidate)
+
+        primary_metric = weighted_features[0]
+        payload = {
+            "feature": primary_metric["feature"],
+            "reference_feature_value": primary_metric["reference_feature_value"],
+            "reference_feature_median": primary_metric["reference_feature_median"],
+            "reference_feature_std_deviation": primary_metric["reference_feature_std_deviation"],
+            "reference_distance_from_median": primary_metric["reference_distance_from_median"],
+            "features": weighted_features,
+        }
+
+        if len(weighted_features) > 1:
+            secondary_metric = weighted_features[1]
+            payload.update({
+                "secondary_metric": secondary_metric["feature"],
+                "secondary_metric_value": secondary_metric["reference_feature_value"],
+                "secondary_metric_median": secondary_metric["reference_feature_median"],
+                "secondary_metric_std_deviation": secondary_metric["reference_feature_std_deviation"],
+                "secondary_distance_from_median": secondary_metric["reference_distance_from_median"],
+            })
+
+        return payload
+
+    def _select_greatest_variation_feature(self, ref_track, metas):
+        candidates = []
+
+        for meta in metas:
+            std_value = self._safe_float(meta.std_deviation)
+            if std_value is None:
+                continue
+
             feature = meta.feature
             ref_value = self._safe_float(getattr(ref_track, feature, None))
-
             if ref_value is None:
                 continue
 
-            return {
+            candidates.append({
                 "feature": feature,
                 "reference_feature_value": ref_value,
                 "reference_feature_median": self._safe_float(meta.median),
-                "reference_feature_std_deviation": self._safe_float(meta.std_deviation),
+                "reference_feature_std_deviation": std_value,
                 "reference_distance_from_median": None,
-            }
+                "selection_score": std_value,
+            })
 
-        return None
+        candidates.sort(
+            key=lambda candidate: candidate["selection_score"],
+            reverse=True,
+        )
+
+        return self._build_feature_selection_payload(candidates)
 
     def _select_furthest_from_median_feature(self, ref_track, metas):
-        best_candidate = None
+        candidates = []
 
         for meta in metas:
             feature = meta.feature
@@ -346,21 +391,21 @@ class RecommendationView(generics.GenericAPIView):
             else:
                 comparable_distance = raw_distance
 
-            candidate = {
+            candidates.append({
                 "feature": feature,
                 "reference_feature_value": ref_value,
                 "reference_feature_median": median_value,
                 "reference_feature_std_deviation": std_value,
                 "reference_distance_from_median": comparable_distance,
-            }
+                "selection_score": comparable_distance,
+            })
 
-            if (
-                best_candidate is None
-                or candidate["reference_distance_from_median"] > best_candidate["reference_distance_from_median"]
-            ):
-                best_candidate = candidate
+        candidates.sort(
+            key=lambda candidate: candidate["selection_score"],
+            reverse=True,
+        )
 
-        return best_candidate
+        return self._build_feature_selection_payload(candidates)
 
     def _select_feature_by_strategy(self, strategy, ref_track, metas):
         if strategy == FURTHEST_FROM_THE_MEDIAN_LIST_TYPE:
@@ -368,18 +413,38 @@ class RecommendationView(generics.GenericAPIView):
 
         return self._select_greatest_variation_feature(ref_track, metas)
 
-    def _build_variable_based_list(self, cluster, track_id, feature, reference_feature_value):
-        diff_expr = ExpressionWrapper(
-            Abs(F(feature) - Value(reference_feature_value)),
-            output_field=FloatField(),
-        )
+    def _build_weighted_diff_expr(self, selected_features):
+        score_expr = Value(0.0, output_field=FloatField())
+
+        for selected_feature in selected_features:
+            feature = selected_feature["feature"]
+            reference_value = selected_feature["reference_feature_value"]
+            weight = selected_feature.get("weight", 1.0)
+            std_value = selected_feature.get("reference_feature_std_deviation")
+
+            diff_expr = Abs(F(feature) - Value(reference_value))
+            if std_value is not None and std_value > 0:
+                diff_expr = diff_expr / Value(std_value)
+
+            score_expr = score_expr + (diff_expr * Value(weight))
+
+        return ExpressionWrapper(score_expr, output_field=FloatField())
+
+    def _build_variable_based_list(self, cluster, track_id, selected_feature_data):
+        selected_features = selected_feature_data.get("features") or [selected_feature_data]
 
         qs_similar = (
             Track.objects.filter(cluster=cluster)
             .exclude(id=track_id)
-            .filter(**{f"{feature}__isnull": False})
-            .annotate(diff=diff_expr)
-            .order_by("diff")[:3]
+        )
+
+        for selected_feature in selected_features:
+            qs_similar = qs_similar.filter(**{f"{selected_feature['feature']}__isnull": False})
+
+        qs_similar = (
+            qs_similar
+            .annotate(weighted_diff=self._build_weighted_diff_expr(selected_features))
+            .order_by("weighted_diff")[:3]
         )
 
         return TrackSerializer(qs_similar, many=True).data
@@ -424,24 +489,29 @@ class RecommendationView(generics.GenericAPIView):
         )
 
         used_feature = None
+        primary_metric = None
+        secondary_metric = None
         reference_feature_value = None
         reference_feature_median = None
         reference_feature_std_deviation = None
         reference_distance_from_median = None
+        used_features = []
         variable_based_list = []
 
         if selected_feature_data:
             used_feature = selected_feature_data["feature"]
+            primary_metric = selected_feature_data.get("feature")
+            secondary_metric = selected_feature_data.get("secondary_metric")
             reference_feature_value = selected_feature_data["reference_feature_value"]
             reference_feature_median = selected_feature_data["reference_feature_median"]
             reference_feature_std_deviation = selected_feature_data["reference_feature_std_deviation"]
             reference_distance_from_median = selected_feature_data["reference_distance_from_median"]
+            used_features = selected_feature_data.get("features", [])
 
             variable_based_list = self._build_variable_based_list(
                 cluster=cluster,
                 track_id=track_id,
-                feature=used_feature,
-                reference_feature_value=reference_feature_value,
+                selected_feature_data=selected_feature_data,
             )
 
         return Response(
@@ -452,6 +522,9 @@ class RecommendationView(generics.GenericAPIView):
                 "variable_based_list": variable_based_list,
                 "variable_based_strategy": variable_based_strategy,
                 "used_feature": used_feature,
+                "primary_metric": primary_metric,
+                "secondary_metric": secondary_metric,
+                "used_features": used_features,
                 "reference_feature_value": reference_feature_value,
                 "reference_feature_median": reference_feature_median,
                 "reference_feature_std_deviation": reference_feature_std_deviation,
@@ -481,6 +554,11 @@ class RecommendationEvaluationSubmitView(generics.GenericAPIView):
             return None
         return self._safe_float(getattr(track, feature, None))
 
+    def _feature_name_or_none(self, feature):
+        if not feature or feature not in ALLOWED_SIMILARITY_FEATURES:
+            return None
+        return feature
+
     def _default_experiment_config(self):
         return {
             "strategy_version": os.getenv("STRATEGY_VERSION"),
@@ -503,6 +581,8 @@ class RecommendationEvaluationSubmitView(generics.GenericAPIView):
         base_track = Track.objects.get(id=data["base_track_id"])
 
         used_feature = data.get("used_feature") or None
+        primary_metric = self._feature_name_or_none(data.get("primary_metric") or used_feature)
+        secondary_metric = self._feature_name_or_none(data.get("secondary_metric"))
         strategy_version = data.get("strategy_version") or os.getenv("STRATEGY_VERSION")
         dataset_version = data.get("dataset_version") or os.getenv("DATASET_NAME")
         cluster_algorithm = data.get("cluster_algorithm") or os.getenv("ALGORITHM")
@@ -539,18 +619,27 @@ class RecommendationEvaluationSubmitView(generics.GenericAPIView):
             recommended_track = Track.objects.get(id=item["track_id"])
 
             list_type = item["list_type"]
-            base_metric = None if list_type == RANDOM_LIST_TYPE else (item.get("base_metric") or used_feature)
+            if list_type == RANDOM_LIST_TYPE:
+                item_primary_metric = None
+                item_secondary_metric = None
+            else:
+                item_primary_metric = self._feature_name_or_none(
+                    item.get("primary_metric") or primary_metric
+                )
+                item_secondary_metric = self._feature_name_or_none(
+                    item.get("secondary_metric") or secondary_metric
+                )
 
             recommended_track_name = item.get("recommended_track_name") or recommended_track.name
             recommended_track_artists = item.get("recommended_track_artists") or recommended_track.artists
 
             base_track_feature_value = item.get("base_track_feature_value")
             if base_track_feature_value is None:
-                base_track_feature_value = self._feature_value(base_track, base_metric)
+                base_track_feature_value = self._feature_value(base_track, item_primary_metric)
 
             recommended_track_feature_value = item.get("recommended_track_feature_value")
             if recommended_track_feature_value is None:
-                recommended_track_feature_value = self._feature_value(recommended_track, base_metric)
+                recommended_track_feature_value = self._feature_value(recommended_track, item_primary_metric)
 
             evaluations.append(
                 RecommendationEvaluation(
@@ -562,7 +651,8 @@ class RecommendationEvaluationSubmitView(generics.GenericAPIView):
                     list_type=list_type,
                     rating=item["rating"],
                     language_influenced_rating=item.get("language_influenced_rating") is True,
-                    base_metric=base_metric,
+                    primary_metric=item_primary_metric,
+                    secondary_metric=item_secondary_metric,
                     recommendation_cluster=item.get("recommendation_cluster", recommended_track.cluster),
                     base_track_cluster_at_recommendation=base_track.cluster,
                     recommended_track_cluster_at_recommendation=recommended_track.cluster,
