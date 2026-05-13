@@ -22,6 +22,7 @@ SQLITE_PATH = FINAL_DIR / "_dedup_index.sqlite"
 
 TARGET_MAX_FILE_SIZE_MB = int(os.getenv("TARGET_MAX_FILE_SIZE_MB", "45"))
 TARGET_MAX_FILE_SIZE_BYTES = TARGET_MAX_FILE_SIZE_MB * 1024 * 1024
+INVALID_LOUDNESS_THRESHOLD = -100000.0
 
 CANONICAL_COLUMNS: List[str] = [
     "id", "name", "popularity", "duration_ms", "explicit", "artists",
@@ -189,6 +190,13 @@ class SplitCsvWriter:
         self.current_path = None
 
 
+def has_invalid_loudness(row: dict) -> bool:
+    try:
+        return float((row.get("loudness") or "").strip()) <= INVALID_LOUDNESS_THRESHOLD
+    except (AttributeError, TypeError, ValueError):
+        return False
+
+
 def validate_headers(headers: Iterable[str]) -> None:
     normalized = [str(h).strip() for h in headers]
     missing = [c for c in CANONICAL_COLUMNS if c not in normalized]
@@ -210,6 +218,7 @@ def process_normalized_files(files: List[Path]) -> None:
     total_read = 0
     total_duplicates = 0
     total_invalid_no_id = 0
+    total_invalid_loudness = 0
     selection_sequence = 0
 
     try:
@@ -227,6 +236,10 @@ def process_normalized_files(files: List[Path]) -> None:
                     track_id = (row.get("id") or "").strip()
                     if not track_id:
                         total_invalid_no_id += 1
+                        continue
+
+                    if has_invalid_loudness(row):
+                        total_invalid_loudness += 1
                         continue
 
                     name = row.get("name") or ""
@@ -296,6 +309,7 @@ def process_normalized_files(files: List[Path]) -> None:
         print(f"Linhas únicas:              {total_unique}")
         print(f"Linhas duplicadas:          {total_duplicates}")
         print(f"Linhas descartadas s/ id:   {total_invalid_no_id}")
+        print(f"Linhas loudness inválido:   {total_invalid_loudness}")
         print(f"Tamanho alvo por parte:     {TARGET_MAX_FILE_SIZE_MB} MiB")
         print("============================")
     finally:

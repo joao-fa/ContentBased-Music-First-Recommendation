@@ -33,6 +33,7 @@ NORMALIZED_DIR = DATASETS_DIR / "normalized_datasets"
 
 TARGET_MAX_FILE_SIZE_MB = int(os.getenv("TARGET_MAX_FILE_SIZE_MB", "45"))
 TARGET_MAX_FILE_SIZE_BYTES = TARGET_MAX_FILE_SIZE_MB * 1024 * 1024
+INVALID_LOUDNESS_THRESHOLD = -100000.0
 
 CANONICAL_COLUMNS: List[str] = [
     "id",
@@ -173,6 +174,14 @@ def coerce_float_like(value: str) -> str:
         return ""
 
 
+def has_invalid_loudness(row: List[str]) -> bool:
+    try:
+        loudness_idx = CANONICAL_COLUMNS.index("loudness")
+        return float(row[loudness_idx]) <= INVALID_LOUDNESS_THRESHOLD
+    except (IndexError, TypeError, ValueError):
+        return False
+
+
 def transform_value(column: str, value: str) -> str:
     if column == "explicit":
         return sanitize_bool(value)
@@ -271,6 +280,7 @@ def process_csv_file(csv_path: Path) -> Tuple[bool, int, int, str]:
 
         kept_rows = 0
         discarded_rows = 0
+        discarded_invalid_loudness_rows = 0
 
         try:
             for row in reader:
@@ -280,6 +290,10 @@ def process_csv_file(csv_path: Path) -> Tuple[bool, int, int, str]:
                     discarded_rows += 1
                     continue
 
+                if has_invalid_loudness(canonical_row):
+                    discarded_invalid_loudness_rows += 1
+                    continue
+
                 writer.write_row(canonical_row)
                 kept_rows += 1
 
@@ -287,9 +301,12 @@ def process_csv_file(csv_path: Path) -> Tuple[bool, int, int, str]:
             gc.collect()
 
             print(
-                f"[INFO] {csv_path.name}: linhas mantidas={kept_rows}, descartadas_sem_id={discarded_rows}, partes={writer.part_number}"
+                f"[INFO] {csv_path.name}: linhas mantidas={kept_rows}, "
+                f"descartadas_sem_id={discarded_rows}, "
+                f"descartadas_loudness_invalido={discarded_invalid_loudness_rows}, "
+                f"partes={writer.part_number}"
             )
-            return True, kept_rows, discarded_rows, ""
+            return True, kept_rows, discarded_rows + discarded_invalid_loudness_rows, ""
         finally:
             writer.close()
 
@@ -335,7 +352,7 @@ def main() -> None:
     print(f"Arquivos processados:     {processed_count}")
     print(f"Arquivos descartados:     {discarded_file_count}")
     print(f"Linhas mantidas:          {total_kept_rows}")
-    print(f"Linhas descartadas s/ id: {total_discarded_rows}")
+    print(f"Linhas descartadas:       {total_discarded_rows}")
     print(f"Tamanho alvo por parte:   {TARGET_MAX_FILE_SIZE_MB} MiB")
     print("============================")
 
