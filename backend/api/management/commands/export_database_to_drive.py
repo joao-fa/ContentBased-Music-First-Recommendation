@@ -32,7 +32,8 @@ EXPORT_DEFINITIONS = {
             ("list_type", "list_type"),
             ("rating", "rating"),
             ("language_influenced_rating", "language_influenced_rating"),
-            ("base_metric", "base_metric"),
+            ("primary_metric", "primary_metric"),
+            ("secondary_metric", "secondary_metric"),
             ("recommendation_cluster", "recommendation_cluster"),
             ("base_track_cluster_at_recommendation", "base_track_cluster_at_recommendation"),
             (
@@ -66,7 +67,6 @@ EXPORT_DEFINITIONS = {
             ("base_track_name", "base_track_name"),
             ("base_track_artists", "base_track_artists"),
             ("recommendation_cluster", "recommendation_cluster"),
-            ("used_feature", "used_feature"),
             ("strategy_version", "strategy_version"),
             ("dataset_version", "dataset_version"),
             ("cluster_algorithm", "cluster_algorithm"),

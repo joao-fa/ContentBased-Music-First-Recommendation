@@ -36,7 +36,6 @@ class Migration(migrations.Migration):
                 ('order_in_list', models.PositiveSmallIntegerField()),
                 ('list_type', models.CharField(choices=[('listRandom', 'Lista Aleatória'), ('listVariableBased', 'Lista Baseada em Variável')], max_length=30)),
                 ('rating', models.PositiveSmallIntegerField()),
-                ('base_metric', models.CharField(blank=True, max_length=100, null=True)),
                 ('track_cluster', models.IntegerField(blank=True, null=True)),
                 ('recommended_track_name', models.CharField(blank=True, max_length=255, null=True)),
                 ('recommended_track_artists', models.TextField(blank=True, default='')),

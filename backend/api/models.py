@@ -75,8 +75,6 @@ class RecommendationBatch(models.Model):
     base_track_artists = models.TextField(blank=True, default="")
     recommendation_cluster = models.IntegerField(null=True, blank=True)
 
-    used_feature = models.CharField(max_length=100, null=True, blank=True)
-
     strategy_version = models.CharField(
         max_length=50,
         blank=True,
@@ -146,7 +144,8 @@ class RecommendationEvaluation(models.Model):
 
     language_influenced_rating = models.BooleanField(default=False)
 
-    base_metric = models.CharField(max_length=100, null=True, blank=True)
+    primary_metric = models.CharField(max_length=100, null=True, blank=True)
+    secondary_metric = models.CharField(max_length=100, null=True, blank=True)
     recommendation_cluster = models.IntegerField(null=True, blank=True)
 
     base_track_cluster_at_recommendation = models.IntegerField(null=True, blank=True)

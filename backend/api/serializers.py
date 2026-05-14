@@ -61,7 +61,8 @@ class RecommendationEvaluationItemSerializer(serializers.Serializer):
 
     language_influenced_rating = serializers.BooleanField(required=False, default=False)
 
-    base_metric = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    primary_metric = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    secondary_metric = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     recommendation_cluster = serializers.IntegerField(required=False, allow_null=True)
 
     base_track_feature_value = serializers.FloatField(required=False, allow_null=True)
@@ -76,7 +77,8 @@ class RecommendationEvaluationItemSerializer(serializers.Serializer):
 
 class RecommendationEvaluationSubmitSerializer(serializers.Serializer):
     base_track_id = serializers.CharField()
-    used_feature = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    primary_metric = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    secondary_metric = serializers.CharField(required=False, allow_null=True, allow_blank=True)
 
     session_uuid = serializers.UUIDField(required=False, allow_null=True)
     client_started_at = serializers.DateTimeField(required=False, allow_null=True)
@@ -145,7 +147,8 @@ class MyRecommendationEvaluationItemSerializer(serializers.ModelSerializer):
             "language_influenced_rating",
             "list_type",
             "order_in_list",
-            "base_metric",
+            "primary_metric",
+            "secondary_metric",
             "recommendation_cluster",
             "base_track_cluster_at_recommendation",
             "recommended_track_cluster_at_recommendation",
@@ -169,7 +172,6 @@ class MyRecommendationBatchSerializer(serializers.ModelSerializer):
             "base_track_name",
             "base_track_artists",
             "recommendation_cluster",
-            "used_feature",
             "client_started_at",
             "client_submitted_at",
             "duration_seconds",
