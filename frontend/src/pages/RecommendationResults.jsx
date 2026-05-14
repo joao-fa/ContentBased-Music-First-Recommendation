@@ -848,7 +848,7 @@ export default function RecommendationResults() {
       </header>
 
       <main className="form-container recommender-container">
-        <h1 className="recommender-title">Avalie as Recomendações de acordo com seu gosto</h1>
+        <h1 className="recommender-title">Avalie as músicas de acordo com seu gosto</h1>
 
         <div className="recommendation-results-intro-row">
           <p className="recommender-subtitle recommendation-results-target">

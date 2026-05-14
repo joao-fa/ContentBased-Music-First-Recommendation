@@ -17,7 +17,8 @@
 # python manage.py evaluate_clustering --datasets dataset_a.csv,dataset_b.csv --k_range 50:150:10 --use_minibatch                                                                  #
 #                                                                                                                                                                                  #
 # 6) Avaliação final do projeto                                                                                                                                                    #
-# python manage.py evaluate_clustering --k_range 10:200:1 --sample 63585 --use_minibatch --save_csv api/data/cluster_management/cluster_eval.csv                                   #
+# python manage.py evaluate_clustering --k_range 2:100:1 --sample 63585 --use_minibatch --save_csv api/data/cluster_management/cluster_eval_2_100_1_63585_minibatch.csv            #
+# python manage.py evaluate_clustering --k_range 2:20:1 --sample 63585 --save_csv api/data/cluster_management/cluster_eval_clean_kmeans_2_20_1.csv                                 #  
 #                                                                                                                                                                                  #
 # Observação:                                                                                                                                                                      #
 # - O modelo é treinado sobre a união completa dos datasets.                                                                                                                       #
