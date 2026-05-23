@@ -1,3 +1,4 @@
+import math
 import os
 import random
 import re
@@ -47,6 +48,11 @@ VARIABLE_BASED_LIST_TYPES = {
 PRIMARY_FEATURE_WEIGHT = 0.6666
 SECONDARY_FEATURE_WEIGHT = 0.3334
 MAX_WEIGHTED_FEATURES = 2
+
+
+
+FILTERED_CLUSTER_RATIO = 0.10
+TOP_CLUSTER_POOL_MIN_SIZE = 1
 
 
 # ======================================================
@@ -430,13 +436,71 @@ class RecommendationView(generics.GenericAPIView):
 
         return ExpressionWrapper(score_expr, output_field=FloatField())
 
-    def _build_variable_based_list(self, cluster, track_id, selected_feature_data):
-        selected_features = selected_feature_data.get("features") or [selected_feature_data]
+    def _build_distance_from_cluster_median_vector(self, track, median_by_feature):
+        vector = {}
 
-        qs_similar = (
+        for feature in ALLOWED_SIMILARITY_FEATURES:
+            median_value = median_by_feature.get(feature)
+            track_value = self._safe_float(getattr(track, feature, None))
+            if median_value is None or track_value is None:
+                return None
+            vector[feature] = track_value - median_value
+
+        return vector
+
+    def _euclidean_distance(self, reference_vector, candidate_vector):
+        squared_distance_sum = 0.0
+
+        for feature in ALLOWED_SIMILARITY_FEATURES:
+            diff = candidate_vector[feature] - reference_vector[feature]
+            squared_distance_sum += diff * diff
+
+        return math.sqrt(squared_distance_sum)
+
+    def _build_filtered_cluster_queryset(self, cluster, ref_track, metas):
+        median_by_feature = {
+            meta.feature: self._safe_float(meta.median)
+            for meta in metas
+            if meta.feature in ALLOWED_SIMILARITY_FEATURES
+        }
+
+        reference_vector = self._build_distance_from_cluster_median_vector(ref_track, median_by_feature)
+        if reference_vector is None:
+            return Track.objects.none()
+
+        cluster_candidates = list(
             Track.objects.filter(cluster=cluster)
-            .exclude(id=track_id)
+            .exclude(id=ref_track.id)
         )
+        if not cluster_candidates:
+            return Track.objects.none()
+
+        ranked_candidates = []
+        for candidate in cluster_candidates:
+            candidate_vector = self._build_distance_from_cluster_median_vector(candidate, median_by_feature)
+            if candidate_vector is None:
+                continue
+
+            ranked_candidates.append(
+                (candidate.id, self._euclidean_distance(reference_vector, candidate_vector))
+            )
+
+        if not ranked_candidates:
+            return Track.objects.none()
+
+        ranked_candidates.sort(key=lambda item: item[1])
+
+        top_n = max(
+            TOP_CLUSTER_POOL_MIN_SIZE,
+            math.ceil(len(ranked_candidates) * FILTERED_CLUSTER_RATIO),
+        )
+        shortlisted_ids = [track_id for track_id, _distance in ranked_candidates[:top_n]]
+
+        return Track.objects.filter(id__in=shortlisted_ids)
+
+    def _build_variable_based_list(self, candidate_queryset, selected_feature_data):
+        selected_features = selected_feature_data.get("features") or [selected_feature_data]
+        qs_similar = candidate_queryset
 
         for selected_feature in selected_features:
             qs_similar = qs_similar.filter(**{f"{selected_feature['feature']}__isnull": False})
@@ -471,15 +535,13 @@ class RecommendationView(generics.GenericAPIView):
         if cluster is None:
             return Response({"error": "Track referência não possui cluster no banco."}, status=400)
 
-        qs_random = (
-            Track.objects.filter(cluster=cluster)
-            .exclude(id=track_id)
-            .order_by("?")[:3]
-        )
+        metas = self._get_cluster_metadata(cluster)
+        filtered_cluster_qs = self._build_filtered_cluster_queryset(cluster, ref_track, metas)
+
+        qs_random = filtered_cluster_qs.order_by("?")[:3]
         random_list = TrackSerializer(qs_random, many=True).data
 
         variable_based_strategy = self._resolve_variable_based_strategy(request)
-        metas = self._get_cluster_metadata(cluster)
         cluster_metadata_snapshot = self._build_cluster_metadata_snapshot(metas)
 
         selected_feature_data = self._select_feature_by_strategy(
@@ -509,8 +571,7 @@ class RecommendationView(generics.GenericAPIView):
             used_features = selected_feature_data.get("features", [])
 
             variable_based_list = self._build_variable_based_list(
-                cluster=cluster,
-                track_id=track_id,
+                candidate_queryset=filtered_cluster_qs,
                 selected_feature_data=selected_feature_data,
             )
 
