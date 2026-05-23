@@ -469,23 +469,12 @@ export default function Recommender() {
       return;
     }
 
-    try {
-      setLoading(true);
-      setErrorMsg("");
-
-      const response = await api.post("/api/recommend/", {
-        track: { id: selectedTrack.id },
-      });
-
-      navigate("/recommendation-results", { state: response.data });
-    } catch (err) {
-      console.error(err);
-      showErrorAndScroll(
-        "Erro ao gerar recomendações. Por favor, tente novamente mais tarde ou entre em contato com o Administrador."
-      );
-    } finally {
-      setLoading(false);
-    }
+    setErrorMsg("");
+    navigate("/recommendation-results", {
+      state: {
+        selected_track: selectedTrack,
+      },
+    });
   };
 
   const fetchArtistTracks = async (artistName) => {
@@ -568,23 +557,12 @@ export default function Recommender() {
       return;
     }
 
-    try {
-      setLoading(true);
-      setErrorMsg("");
-
-      const response = await api.post("/api/recommend/", {
-        track: { id: artistSelectedTrack.id },
-      });
-
-      navigate("/recommendation-results", { state: response.data });
-    } catch (err) {
-      console.error(err);
-      showErrorAndScroll(
-        "Erro ao gerar recomendações. Por favor, tente novamente mais tarde ou entre em contato com o Administrador."
-      );
-    } finally {
-      setLoading(false);
-    }
+    setErrorMsg("");
+    navigate("/recommendation-results", {
+      state: {
+        selected_track: artistSelectedTrack,
+      },
+    });
   };
 
   const preventManualSubmit = (e) => {

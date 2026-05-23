@@ -50,6 +50,36 @@ class RecommendationStrategySelectionTests(SimpleTestCase):
         self.assertEqual(selected["features"][1]["weight"], SECONDARY_FEATURE_WEIGHT)
         self.assertEqual(selected["feature"], "energy")
 
+    def test_distance_from_cluster_median_vector_uses_all_available_features(self):
+        median_map = {
+            "danceability": 0.6,
+            "energy": 0.5,
+            "loudness": -10.0,
+            "tempo": 120.0,
+            "valence": 0.4,
+            "acousticness": 0.3,
+            "instrumentalness": 0.1,
+            "liveness": 0.2,
+            "speechiness": 0.05,
+        }
+        track = SimpleNamespace(
+            danceability=0.8,
+            energy=0.9,
+            loudness=-8.0,
+            tempo=124.0,
+            valence=0.7,
+            acousticness=0.4,
+            instrumentalness=0.3,
+            liveness=0.5,
+            speechiness=0.08,
+        )
+
+        vector = self.view._build_distance_from_cluster_median_vector(track, median_map)
+
+        self.assertAlmostEqual(vector["danceability"], 0.2)
+        self.assertAlmostEqual(vector["tempo"], 4.0)
+        self.assertAlmostEqual(vector["speechiness"], 0.03)
+
     def test_furthest_from_median_selects_two_largest_standardized_distances(self):
         metas = [
             SimpleNamespace(feature="danceability", median=0.7, std_deviation=0.1),
@@ -63,3 +93,11 @@ class RecommendationStrategySelectionTests(SimpleTestCase):
         self.assertEqual(selected["features"][0]["weight"], PRIMARY_FEATURE_WEIGHT)
         self.assertEqual(selected["features"][1]["weight"], SECONDARY_FEATURE_WEIGHT)
         self.assertEqual(selected["feature"], "energy")
+
+    def test_case_only_duplicate_detection_matches_name_and_artists(self):
+        ref_track = SimpleNamespace(name="Cry for You", artists="September")
+        duplicate = SimpleNamespace(name="Cry For You", artists="SEPTEMBER")
+        different_artist = SimpleNamespace(name="Cry For You", artists="Jodeci")
+
+        self.assertTrue(self.view._is_case_only_duplicate_of_reference(ref_track, duplicate))
+        self.assertFalse(self.view._is_case_only_duplicate_of_reference(ref_track, different_artist))
