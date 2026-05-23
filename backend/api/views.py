@@ -457,6 +457,32 @@ class RecommendationView(generics.GenericAPIView):
 
         return math.sqrt(squared_distance_sum)
 
+    def _normalized_text(self, value):
+        if value is None:
+            return None
+        return str(value).strip().casefold()
+
+    def _is_case_only_duplicate_of_reference(self, ref_track, candidate_track):
+        if not ref_track or not candidate_track:
+            return False
+
+        reference_name = self._normalized_text(getattr(ref_track, "name", None))
+        candidate_name = self._normalized_text(getattr(candidate_track, "name", None))
+
+        if not reference_name or not candidate_name:
+            return False
+
+        if reference_name != candidate_name:
+            return False
+
+        reference_artists = self._normalized_text(getattr(ref_track, "artists", None))
+        candidate_artists = self._normalized_text(getattr(candidate_track, "artists", None))
+
+        if reference_artists and candidate_artists:
+            return reference_artists == candidate_artists
+
+        return True
+
     def _build_filtered_cluster_queryset(self, cluster, ref_track, metas):
         median_by_feature = {
             meta.feature: self._safe_float(meta.median)
@@ -477,6 +503,9 @@ class RecommendationView(generics.GenericAPIView):
 
         ranked_candidates = []
         for candidate in cluster_candidates:
+            if self._is_case_only_duplicate_of_reference(ref_track, candidate):
+                continue
+
             candidate_vector = self._build_distance_from_cluster_median_vector(candidate, median_by_feature)
             if candidate_vector is None:
                 continue

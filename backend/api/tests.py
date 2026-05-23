@@ -93,3 +93,11 @@ class RecommendationStrategySelectionTests(SimpleTestCase):
         self.assertEqual(selected["features"][0]["weight"], PRIMARY_FEATURE_WEIGHT)
         self.assertEqual(selected["features"][1]["weight"], SECONDARY_FEATURE_WEIGHT)
         self.assertEqual(selected["feature"], "energy")
+
+    def test_case_only_duplicate_detection_matches_name_and_artists(self):
+        ref_track = SimpleNamespace(name="Cry for You", artists="September")
+        duplicate = SimpleNamespace(name="Cry For You", artists="SEPTEMBER")
+        different_artist = SimpleNamespace(name="Cry For You", artists="Jodeci")
+
+        self.assertTrue(self.view._is_case_only_duplicate_of_reference(ref_track, duplicate))
+        self.assertFalse(self.view._is_case_only_duplicate_of_reference(ref_track, different_artist))
