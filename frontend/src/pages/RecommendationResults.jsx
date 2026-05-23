@@ -2,6 +2,7 @@ import { HelpCircle, Play } from "lucide-react";
 import { FaSpotify } from "react-icons/fa";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import LoadingText from "../components/LoadingText";
 import returnImage from "../assets/recommender/return.png";
 import referencesImage from "../assets/references/profile.png";
 import myRecommendationsImage from "../assets/recommender/my_recommendations.png";
@@ -113,6 +114,15 @@ export default function RecommendationResults() {
 
   const data = location.state;
 
+  const [resolvedData, setResolvedData] = useState(() => data || null);
+  const [recommendationsLoading, setRecommendationsLoading] = useState(false);
+  const [recommendationsLoadError, setRecommendationsLoadError] = useState("");
+
+  const hasReadyLists = (payload) =>
+    Boolean(payload) &&
+    Array.isArray(payload.random_list) &&
+    Array.isArray(payload.variable_based_list);
+
   const {
     selected_track,
     random_list,
@@ -128,7 +138,7 @@ export default function RecommendationResults() {
     reference_distance_from_median,
     cluster_metadata_snapshot,
     cluster,
-  } = data || {};
+  } = resolvedData || {};
 
   const resolvedVariableBasedStrategy =
     variable_based_strategy === FURTHEST_FROM_THE_MEDIAN_LIST_TYPE
@@ -157,7 +167,7 @@ export default function RecommendationResults() {
 
   const frozenListsRef = useRef(null);
 
-  if (data && frozenListsRef.current === null) {
+  if (resolvedData && hasReadyLists(resolvedData) && frozenListsRef.current === null) {
     const initialRandomList = toArray(random_list).slice(0, 3);
     const initialVariableBasedList = toArray(variable_based_list).slice(0, 3);
     const shouldShowRandomFirst = Math.random() < 0.5;
@@ -505,10 +515,67 @@ export default function RecommendationResults() {
   };
 
   const handleAdvanceToRecommendations = () => {
+    if (recommendationsLoading) {
+      setRecommendationsLoadError(
+        "Estamos finalizando o cálculo das listas. Aguarde mais alguns instantes."
+      );
+      return;
+    }
+
+    if (!hasReadyLists(resolvedData)) {
+      setRecommendationsLoadError(
+        "As listas ainda não estão prontas. Aguarde a conclusão do processamento."
+      );
+      return;
+    }
+
     clientStartedAtRef.current = new Date().toISOString();
     setShowRecommendationIntro(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
+
+  useEffect(() => {
+    if (!data) return;
+    if (hasReadyLists(data)) {
+      setResolvedData(data);
+      return;
+    }
+
+    const selectedTrackId = data?.selected_track?.id;
+    if (!selectedTrackId) return;
+
+    let isCancelled = false;
+
+    const fetchRecommendations = async () => {
+      try {
+        setRecommendationsLoading(true);
+        setRecommendationsLoadError("");
+        const response = await api.post("/api/recommend/", {
+          track: { id: selectedTrackId },
+        });
+
+        if (!isCancelled) {
+          setResolvedData(response.data);
+        }
+      } catch (err) {
+        if (!isCancelled) {
+          setRecommendationsLoadError(
+            "Erro ao calcular as listas de recomendação. Aguarde um instante e tente avançar novamente."
+          );
+        }
+      } finally {
+        if (!isCancelled) {
+          setRecommendationsLoading(false);
+        }
+      }
+    };
+
+    fetchRecommendations();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [data]);
 
   const getSpotifyTrackUrl = (spotifyId) =>
     `https://open.spotify.com/track/${spotifyId}`;
@@ -688,7 +755,7 @@ export default function RecommendationResults() {
     );
   }
 
-  if (!data) {
+  if (!resolvedData) {
     return (
       <div className="home-wrapper">
         <header className="home-header">
@@ -799,9 +866,14 @@ export default function RecommendationResults() {
               className="form-button home-button recommender-submit-button"
               onClick={handleAdvanceToRecommendations}
             >
-              Avançar
+              {recommendationsLoading ? <LoadingText label="Preparando listas" /> : "Avançar"}
             </button>
           </div>
+          {recommendationsLoadError && (
+            <p className="recommender-error" style={{ marginTop: "12px" }}>
+              {recommendationsLoadError}
+            </p>
+          )}
         </main>
 
         <footer className="home-footer">
